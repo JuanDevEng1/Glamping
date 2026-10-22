@@ -14,3 +14,6 @@ npm-debug.log*
 
 # Next.js
 next-env.d.ts
+
+# Netlify (estado local del sitio vinculado)
+.netlify

@@ -1,0 +1,9 @@
+# Despliegue en Netlify. En el sitio: base directory "/" y package directory "frontend".
+# Netlify instala el runtime de Next.js (@netlify/plugin-nextjs) automáticamente.
+# Los secretos (DATABASE_URL) van en el panel de Netlify, nunca en este archivo.
+[build]
+  command = "npm run build -w @lauburu/frontend"
+  publish = "frontend/.next"
+
+[build.environment]
+  NODE_VERSION = "22"

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&amp;family=Poppins:wght@300;400;500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container": "#efeeeb",
+            "surface-tint": "#486553",
+            "error-container": "#ffdad6",
+            "on-secondary": "#ffffff",
+            "outline": "#727973",
+            "tertiary-fixed-dim": "#ecbabc",
+            "on-error-container": "#93000a",
+            "on-background": "#1b1c1a",
+            "secondary": "#556159",
+            "on-primary-fixed": "#042013",
+            "on-secondary-fixed-variant": "#3e4942",
+            "on-tertiary-fixed-variant": "#613d3f",
+            "primary": "#466250",
+            "primary-dark": "#264634",
+            "primary-light": "#e8f0eb",
+            "primary-container": "#5e7b68",
+            "secondary-container": "#d9e6db",
+            "background": "#fbf9f6",
+            "tertiary": "#785254",
+            "outline-variant": "#c2c8c1",
+            "surface-container-lowest": "#ffffff",
+            "on-error": "#ffffff",
+            "on-primary": "#ffffff",
+            "surface": "#fbf9f6",
+            "surface-container-highest": "#e4e2e0",
+            "error": "#ba1a1a",
+            "surface-dim": "#dbdad7",
+            "inverse-surface": "#30312f",
+            "surface-container-low": "#f5f3f1",
+            "surface-container-high": "#e9e8e5",
+            "on-surface": "#1b1c1a",
+            "surface-bright": "#fbf9f6",
+            "on-surface-variant": "#424843",
+            "on-primary-container": "#f6fff5"
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "full": "9999px"
+          },
+          spacing: {
+            "gutter": "1rem",
+            "space-xl": "2rem",
+            "margin": "1.5rem",
+            "space-sm": "0.5rem",
+            "space-xs": "0.25rem",
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "margin-desktop": "2rem"
+          },
+          fontFamily: {
+            "body-md": ["Poppins", "sans-serif"],
+            "label-sm": ["Inter", "sans-serif"],
+            "headline-lg": ["Lora", "serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      main > :first-child {
+        margin-top: 0 !important;
+      }
+      main > :last-child {
+        margin-bottom: 0 !important;
+      }
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-background font-body-md text-on-surface antialiased selection:bg-primary-light selection:text-primary-dark">
+<!-- Header -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm transition-all">
+<div class="h-16 max-w-[1240px] mx-auto px-margin-desktop flex items-center justify-between gap-space-lg">
+<div class="flex items-center gap-space-lg">
+<a class="flex items-center gap-2.5 group" href="#">
+<div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[20px]">forest</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-lg text-lg font-bold tracking-tight text-on-surface leading-none">Natura Glamping</span>
+<span class="text-[10px] tracking-wider font-semibold text-secondary uppercase">San Vicente, Colombia</span>
+</div>
+</a>
+</div>
+<nav class="hidden md:flex items-center gap-1 bg-surface-container-low p-1 rounded-lg border border-outline-variant/30">
+<a class="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all py-1.5 px-4 rounded-md" data-path="nosotros" href="#">Nosotros</a>
+<a class="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all py-1.5 px-4 rounded-md" data-path="reservar-fechas" href="#">Reservar</a>
+<a class="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all py-1.5 px-4 rounded-md" data-path="servicios" href="#">Servicios</a>
+</nav>
+<div class="flex items-center gap-3">
+<!-- Shopping Cart Badge -->
+<a class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors text-on-surface text-xs font-semibold shadow-2xs" data-path="carrito" href="#">
+<span class="material-symbols-outlined text-[18px] text-primary">shopping_bag</span>
+<span class="hidden sm:inline">Carrito</span>
+<span class="px-1.5 py-0.5 rounded-full bg-primary text-on-primary text-[10px] font-bold">2</span>
+</a>
+<a class="inline-flex items-center justify-center px-4 h-9 bg-primary text-on-primary text-xs font-semibold rounded-lg hover:bg-primary-dark shadow-sm transition-all" data-path="reservar-fechas" href="#">
+<span>Reservar ahora</span>
+</a>
+<div class="w-9 h-9 rounded-lg bg-surface-container border border-outline-variant/50 flex items-center justify-center text-secondary hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[19px]">person</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="w-full pt-20 min-h-screen bg-background pb-16"><div class="flex flex-col w-full relative">
+<!-- Backdrop Background: Catalog in Blurred/Filtered View -->
+<div class="w-full max-w-[1240px] mx-auto px-margin-desktop py-space-md opacity-35 blur-[3px] pointer-events-none select-none transition-all duration-300">
+<div class="flex items-center justify-between pb-space-md">
+<div>
+<p class="font-label-sm text-label-sm text-secondary uppercase tracking-widest">Catálogo Exclusivo</p>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Experiencias y Bienestar</h2>
+</div>
+<div class="flex gap-space-sm">
+<span class="px-space-md py-space-xs rounded-full bg-surface-container-high text-on-surface text-label-sm font-label-sm">Todos</span>
+<span class="px-space-md py-space-xs rounded-full bg-surface-container text-secondary text-label-sm font-label-sm">Aventura</span>
+<span class="px-space-md py-space-xs rounded-full bg-surface-container text-secondary text-label-sm font-label-sm">Gastronomía</span>
+<span class="px-space-md py-space-xs rounded-full bg-surface-container text-secondary text-label-sm font-label-sm">Bienestar &amp; Spa</span>
+</div>
+</div>
+<!-- Background Mock Grid of Services -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-lg pt-space-sm">
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="w-full h-48 rounded-lg bg-cover bg-center mb-space-sm" data-alt="Expansive mountain range in San Vicente Ferrer Colombia with lush green Andean hills, clear morning light, and natural horseback riding trail in warm natural lighting." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBoeS5FXkqdPzNK1Ngiph3G9DmsWGK94zbUn4xKpAFjaYMrpOWxbSbysVHvlhmfmHVDD6uk9kKwc1XR7Od5cQk6vRQEGTq-ByEeskTGyiMLm3uenhi8QpuVCOCL8p9z6B4gEOSAceIJZm_ZlUdh8JxuuIEXhlF3yjKcI28YHbxABN7xF-uefR0nB2zQ7fWd9id9EzlpEtag9ubDfNEQ-hESxs62rVCFfaX6OCt5ubcqti0ckvY10G0D')"></div>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Aventura guiada</span>
+<h3 class="font-headline-lg text-lg text-on-surface">Cabalgata Ecológica al Mirador</h3>
+<p class="font-body-md text-label-sm text-secondary mt-1">Recorrido por la cordillera verde y mirador panorámico de San Vicente.</p>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="w-full h-48 rounded-lg bg-cover bg-center mb-space-sm" data-alt="Romantic open-air dining setup under twilight sky surrounded by native trees, fairy lights, rustic wooden table, gourmet Colombian fusion food with fine wine." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBVK82UQaUwuag0hyMMKP7aJ_cVk_EdacMMpRcJaBsRntC-pg03iuDZ0x720Rs6o8mH15voB3iazHl8jbAdKymjXNWBSbvLJsMPdJt0xCOTvVt9s4ldRLnmXQLph8iE-1-dFRsnAfU8TJQ2BOHbL26MVCSzvT-mAxPgGgDJg01BkrYSPQfPedbZzxJwqhldXRu5jHLYd1lzVmNJ477nPXt5TltnQfau9y6pVYcgBtNh2bG9jUEkZkE3')"></div>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Gastronomía</span>
+<h3 class="font-headline-lg text-lg text-on-surface">Cena Gourmet &amp; Decoración Romántica</h3>
+<p class="font-body-md text-label-sm text-secondary mt-1">Menú de 4 tiempos con veladas a la luz de las velas y hoguera privada.</p>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="w-full h-48 rounded-lg bg-cover bg-center mb-space-sm" data-alt="Luxury outdoor hot tub Jacuzzi in a wooden deck overlooking misty Andean forest in Antioquia Colombia at sunrise." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDaAYzraswnZUofUuz3pyOifCWS6Hz0L_7xA579bwkVJvizEjf6nAQNmSbqwlLzTVX3DipPTQoiAGeOyySuIwuwSqleda3iv5p_j-sVM4wXhqObmcydTR-d2xP0cEylYUy2uxAxZf9_L9pKiQ-JYqGl3bLv0zkZj0YDTp6TQvuqd8ZD1DiKTCIgNpx1OFV6dH35-ktpCVJPDKxId-RlkFExuadm15o982OlAuHXcSwjyicmJWuvoj2p')"></div>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Relajación</span>
+<h3 class="font-headline-lg text-lg text-on-surface">Ritual Termal &amp; Masaje de Bosque</h3>
+<p class="font-body-md text-label-sm text-secondary mt-1">Tina de hidromasaje aromatizada con hierbas nativas y aceites esenciales.</p>
+</div>
+</div>
+</div>
+<!-- Dimmer / Backdrop Surface -->
+<div class="fixed inset-0 top-16 bg-inverse-surface/35 backdrop-blur-[2px] z-40 transition-opacity" id="drawer-scrim"></div>
+<!-- Cart Slide-Over / Floating Drawer Panel -->
+<aside class="fixed top-16 right-0 bottom-0 z-50 w-full sm:w-[500px] bg-surface-container-lowest shadow-2xl flex flex-col justify-between overflow-hidden">
+<!-- Top Decorative Accents & Header -->
+<div class="flex flex-col bg-surface-container-low px-space-lg pt-space-lg pb-space-md shadow-sm relative">
+<div class="flex items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container shadow-sm">
+<span class="material-symbols-outlined text-[19px]">shopping_bag</span>
+</div>
+<div>
+<h1 class="font-headline-lg text-xl font-bold text-on-surface leading-tight">Tu Carrito de Servicios</h1>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed text-[11px] font-label-sm font-semibold tracking-wide">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                2 experiencias añadidas
+              </span>
+</div>
+</div>
+</div>
+<button aria-label="Cerrar carrito" class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors group cursor-pointer" type="button">
+<span class="material-symbols-outlined text-[20px] group-hover:rotate-90 transition-transform">close</span>
+</button>
+</div>
+<!-- Linked Reservation Card inside Cart -->
+<div class="mt-space-md p-space-sm bg-surface-container-lowest rounded-xl shadow-sm flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+<span class="font-label-sm text-[11px] font-semibold tracking-wider uppercase text-primary">Reserva activa vinculada</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-primary-light text-primary-dark font-label-sm text-[10px] font-bold">Confirmada</span>
+</div>
+<div class="flex items-start justify-between gap-space-sm">
+<div>
+<p class="font-label-sm text-xs font-bold text-on-surface">Domo Estelar - Vista Panorámica</p>
+<p class="font-label-sm text-[11px] text-secondary">Código ref: #GLAMP-94821</p>
+</div>
+<div class="text-right">
+<p class="font-label-sm text-xs font-semibold text-on-surface">18 al 21 Oct, 2025</p>
+<p class="font-label-sm text-[11px] text-secondary">3 noches • 2 huéspedes</p>
+</div>
+</div>
+<div class="flex items-center gap-1 pt-1 text-[11px] text-on-surface-variant font-body-md">
+<span class="material-symbols-outlined text-[14px] text-secondary">sync</span>
+<span>Los servicios adicionales se sincronizan con los horarios de tu estancia.</span>
+</div>
+</div>
+</div>
+<!-- Scrollable Items Area -->
+<div class="flex-1 overflow-y-auto px-space-lg py-space-md space-y-space-md">
+<!-- Item 1: Cabalgata Ecológica -->
+<div class="p-space-md bg-surface-container-low rounded-xl shadow-sm flex flex-col gap-space-sm transition-all hover:bg-surface-container">
+<div class="flex items-start gap-space-md">
+<div class="w-20 h-20 rounded-lg bg-cover bg-center shrink-0 shadow-sm" data-alt="Two majestic horses grazing on a tranquil green ridge in San Vicente Ferrer Antioquia with dramatic mountain valley vista and warm sunlight." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA8Axz6plN2kKQb6rKcCkzEfaRxCAvXAo_CT1ovFSJCHMDnFaT3HUZATtmRXEt2zVLyRw6fya1cj2a7JZ0LhWGA5TzgB9LeGBBg55MwzdtwSjf-rIFdmWnumfAgO2vnCilgeDBBkev8EkKncgy-eQcJSOqqc-HeBYWPCOx3EfdVjpNxD4w99fqEu0fyRSW9b_unNtNFvVDi0McJNNfdoXojBoHt-c-6X_ir69NapJwwA0r32x4XHEox')"></div>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-2">
+<h4 class="font-label-sm text-sm font-semibold text-on-surface truncate">Cabalgata Ecológica al Mirador</h4>
+<button aria-label="Eliminar Cabalgata" class="text-secondary hover:text-error transition-colors p-0.5 cursor-pointer" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<p class="font-label-sm text-xs text-secondary mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary">calendar_today</span>
+              Sábado 19 Oct • 09:00 hrs (Mañana)
+            </p>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-label-sm text-xs text-on-surface-variant">$ 85.000 COP / pers.</span>
+<span class="font-label-sm text-sm font-bold text-on-surface" id="item1-subtotal">$ 170.000 COP</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<!-- Stepper Micro-component -->
+<div class="inline-flex items-center bg-surface-container-lowest rounded-lg p-0.5 shadow-sm">
+<button class="w-7 h-7 rounded flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors cursor-pointer text-xs font-bold" id="item1-decrease" type="button">
+<span class="material-symbols-outlined text-[15px]">remove</span>
+</button>
+<span class="w-16 text-center font-label-sm text-xs font-semibold text-on-surface" id="item1-qty">2 pers.</span>
+<button class="w-7 h-7 rounded flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors cursor-pointer text-xs font-bold" id="item1-increase" type="button">
+<span class="material-symbols-outlined text-[15px]">add</span>
+</button>
+</div>
+<button class="text-secondary hover:text-error text-xs font-label-sm inline-flex items-center gap-1 cursor-pointer transition-colors" type="button">
+<span>Eliminar item</span>
+</button>
+</div>
+</div>
+<!-- Item 2: Cena Gourmet -->
+<div class="p-space-md bg-surface-container-low rounded-xl shadow-sm flex flex-col gap-space-sm transition-all hover:bg-surface-container">
+<div class="flex items-start gap-space-md">
+<div class="w-20 h-20 rounded-lg bg-cover bg-center shrink-0 shadow-sm" data-alt="Romantic gourmet candlelit dinner set for two under night sky and glamping canopy with wine glasses, warm bokeh lights, and organic rustic decor." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC_u2Dzqwo9MCBU2wIb90y563KDWUMKc00ZxHCSOkBhACEG5FEbJ2vRNFwEb9FEPSTlbTETW1uH-qsIOELjHtVftasYd6pB5e2SQK0K_HJ3uYKJI0DB5IH5GwiycFxMs0BYMaZ1aaRddt4h4d6uJaq-AXPFU1WN_28bV7KBt1jikpYgJMdIEFvZjaJ0EkVmdnnwzShNhmWwR9RQTSSVdz-c6dxZ5p83NXh3k8RJQazudFjop6GEP01Q')"></div>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-2">
+<h4 class="font-label-sm text-sm font-semibold text-on-surface truncate">Cena Gourmet &amp; Decoración</h4>
+<button aria-label="Eliminar Cena" class="text-secondary hover:text-error transition-colors p-0.5 cursor-pointer" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+<p class="font-label-sm text-xs text-secondary mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary">schedule</span>
+              Domingo 20 Oct • 20:00 hrs (Noche)
+            </p>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-label-sm text-xs text-on-surface-variant">$ 180.000 COP / pareja</span>
+<span class="font-label-sm text-sm font-bold text-on-surface">$ 180.000 COP</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<!-- Stepper Micro-component -->
+<div class="inline-flex items-center bg-surface-container-lowest rounded-lg p-0.5 shadow-sm">
+<button class="w-7 h-7 rounded flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors cursor-pointer text-xs font-bold" type="button">
+<span class="material-symbols-outlined text-[15px]">remove</span>
+</button>
+<span class="w-16 text-center font-label-sm text-xs font-semibold text-on-surface">1 paq.</span>
+<button class="w-7 h-7 rounded flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors cursor-pointer text-xs font-bold" type="button">
+<span class="material-symbols-outlined text-[15px]">add</span>
+</button>
+</div>
+<button class="text-secondary hover:text-error text-xs font-label-sm inline-flex items-center gap-1 cursor-pointer transition-colors" type="button">
+<span>Eliminar item</span>
+</button>
+</div>
+</div>
+<!-- Out-of-Stock / Notice Alert Banner -->
+<div class="p-space-md rounded-xl bg-error-container text-on-error-container shadow-sm flex flex-col gap-2 relative overflow-hidden">
+<div class="flex items-start gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-error shrink-0">warning</span>
+<div class="flex-1">
+<p class="font-label-sm text-xs font-bold text-error uppercase tracking-wider">Aviso de cupos agotados</p>
+<p class="font-body-md text-xs text-on-error-container mt-0.5 leading-snug">
+              El servicio <strong class="font-semibold">Transporte 4x4 Aeropuerto - Domo</strong> ya no cuenta con cupos para las fechas seleccionadas (18-21 Oct).
+            </p>
+</div>
+</div>
+<div class="flex justify-end pt-1">
+<button class="px-space-md py-1 bg-surface-container-lowest text-error hover:bg-error hover:text-on-error transition-all rounded-lg text-xs font-label-sm font-semibold shadow-sm inline-flex items-center gap-1 cursor-pointer" type="button">
+<span class="material-symbols-outlined text-[14px]">close</span>
+            Quitar del carrito
+          </button>
+</div>
+</div>
+<!-- Free Cancellation & Policy Micro-Card -->
+<div class="p-space-sm rounded-lg bg-surface-container flex items-center gap-space-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px] text-primary shrink-0">eco</span>
+<p class="font-label-sm text-[11px] leading-tight">
+          Todas las actividades aportan a la reforestación del bosque nativo en San Vicente Ferrer.
+        </p>
+</div>
+</div>
+<!-- Bottom Actions & Pricing Summary Box -->
+<div class="bg-surface-container-low px-space-lg py-space-md shadow-xl flex flex-col gap-space-sm">
+<!-- Breakdown Summary -->
+<div class="space-y-1.5 pb-2">
+<div class="flex items-center justify-between text-xs font-label-sm text-secondary">
+<span>Subtotal experiencias:</span>
+<span class="text-on-surface font-semibold" id="cart-subtotal">$ 350.000 COP</span>
+</div>
+<div class="flex items-center justify-between text-xs font-label-sm text-secondary">
+<span class="flex items-center gap-1">
+            Impuestos y cargos hoteleros:
+            <span class="material-symbols-outlined text-[13px] text-secondary" title="Incluye IVA y seguros locales">info</span>
+</span>
+<span class="px-1.5 py-0.5 bg-secondary-container text-on-secondary-fixed rounded text-[10px] font-bold tracking-wide">Incluidos</span>
+</div>
+<div class="flex items-baseline justify-between pt-1">
+<div>
+<span class="font-headline-lg text-base font-bold text-on-surface block">Total a pagar</span>
+<span class="font-label-sm text-[11px] text-secondary">Sincronizado a tu reserva</span>
+</div>
+<span class="font-headline-lg text-2xl font-bold text-primary" id="cart-total">$ 350.000 COP</span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-2 pt-1">
+<button class="w-full h-11 bg-primary text-on-primary hover:bg-primary-dark rounded-xl font-label-sm text-sm font-semibold flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.99] cursor-pointer" type="button">
+<span>Ir a pagar</span>
+<span class="text-xs bg-on-primary/20 px-2 py-0.5 rounded-full" id="btn-total-badge">$ 350.000 COP</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<button class="w-full h-9 bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-label-sm text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer" type="button">
+<span class="material-symbols-outlined text-[16px]">travel_explore</span>
+<span>Seguir explorando servicios</span>
+</button>
+</div>
+<!-- Trust Badge & Guarantees -->
+<div class="pt-2 flex items-center justify-center gap-1.5 text-center text-[11px] font-label-sm text-secondary">
+<span class="material-symbols-outlined text-[14px] text-primary">lock</span>
+<span>Pago seguro SSL • Cancelación gratuita hasta 48h antes del check-in</span>
+</div>
+</div>
+</aside>
+<!-- Stepper Micro-Interaction Script -->
+<script>
+    (function() {
+      const incBtn = document.getElementById('item1-increase');
+      const decBtn = document.getElementById('item1-decrease');
+      const qtyLabel = document.getElementById('item1-qty');
+      const subtotalLabel = document.getElementById('item1-subtotal');
+      const cartSubtotal = document.getElementById('cart-subtotal');
+      const cartTotal = document.getElementById('cart-total');
+      const btnTotalBadge = document.getElementById('btn-total-badge');
+
+      let qty = 2;
+      const unitPrice = 85000;
+      const dinnerPrice = 180000;
+
+      function updateDisplays() {
+        const item1Total = qty * unitPrice;
+        const grandTotal = item1Total + dinnerPrice;
+        qtyLabel.textContent = qty + (qty === 1 ? ' pers.' : ' pers.');
+        subtotalLabel.textContent = '$ ' + item1Total.toLocaleString('es-CO') + ' COP';
+        cartSubtotal.textContent = '$ ' + grandTotal.toLocaleString('es-CO') + ' COP';
+        cartTotal.textContent = '$ ' + grandTotal.toLocaleString('es-CO') + ' COP';
+        btnTotalBadge.textContent = '$ ' + grandTotal.toLocaleString('es-CO') + ' COP';
+      }
+
+      if (incBtn && decBtn) {
+        incBtn.addEventListener('click', function() {
+          if (qty < 6) {
+            qty++;
+            updateDisplays();
+          }
+        });
+        decBtn.addEventListener('click', function() {
+          if (qty > 1) {
+            qty--;
+            updateDisplays();
+          }
+        });
+      }
+    })();
+  </script>
+</div></main>
+<!-- Footer -->
+<footer class="w-full bg-surface-container-lowest border-t border-outline-variant/30 py-space-xl mt-space-xl">
+<div class="max-w-[1240px] mx-auto px-margin-desktop">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-lg pb-space-lg border-b border-outline-variant/20">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded bg-primary text-on-primary flex items-center justify-center text-xs">
+<span class="material-symbols-outlined text-[15px]">forest</span>
+</div>
+<span class="text-sm font-bold text-on-surface">Natura Glamping</span>
+</div>
+<p class="text-xs text-secondary mb-1">Contacto: reservas@naturaglamping.com | +57 (300) 123-4567</p>
+<p class="text-xs text-secondary">Vereda El Retiro, San Vicente Ferrer, Antioquia, Colombia</p>
+</div>
+<div>
+<span class="text-xs font-bold text-on-surface uppercase tracking-wider block mb-2">Navegación</span>
+<ul class="space-y-1.5 text-xs text-secondary">
+<li><a class="hover:text-primary transition-colors" data-path="nosotros" href="#">Sobre Nosotros</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="servicios" href="#">Catálogo de Domos &amp; Servicios</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="reservar-fechas" href="#">Iniciar Reserva</a></li>
+</ul>
+</div>
+<div>
+<span class="text-xs font-bold text-on-surface uppercase tracking-wider block mb-2">Legal &amp; Soporte</span>
+<ul class="space-y-1.5 text-xs text-secondary">
+<li><a class="hover:text-primary transition-colors" data-path="terminos-condiciones" href="#">Términos y Condiciones</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="politica-privacidad" href="#">Política de Cancelación &amp; Privacidad</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="preguntas-frecuentes" href="#">Preguntas Frecuentes</a></li>
+</ul>
+</div>
+</div>
+<div class="pt-space-md flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-secondary">
+<p>© 2025 Natura Glamping Prototype. Fidelity Modern Design System.</p>
+<p class="text-[11px] text-secondary/80">Todos los derechos reservados. Reservas seguras SSL.</p>
+</div>
+</div>
+</footer>
+</body></html>

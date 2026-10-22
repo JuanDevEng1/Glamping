@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* Tokens de REGLAS_WEB.md. Ningún color, radio ni sombra fuera de aquí. */
+
+:root {
+  /* Paleta oficial */
+  --verde: #2f4a3a; /* primario: header, footer, títulos, bloques oscuros */
+  --cafe: #5b3a29; /* texto de lectura */
+  --terracota: #b5563a; /* acento: CTA, enlaces */
+  --crema: #f3ebdd; /* fondo predominante, texto sobre oscuro */
+  --miel: #d9a441; /* solo detalle: bordes de tarjeta, íconos, estrellas */
+  --niebla: #c9d1cb; /* divisores, placeholders, fondos secundarios */
+  --blanco: #ffffff; /* superficie de tarjetas sobre crema */
+
+  /* Derivados funcionales (solo estados) */
+  --terracota-oscuro: #9e4a31; /* hover del CTA y texto terracota pequeño */
+  --verde-hoja: #3a5747; /* siluetas decorativas sobre verde */
+  --verde-tinte: #e4e9e5; /* fondo sutil de secciones alternas */
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-verde: var(--verde);
+  --color-cafe: var(--cafe);
+  --color-terracota: var(--terracota);
+  --color-terracota-oscuro: var(--terracota-oscuro);
+  --color-crema: var(--crema);
+  --color-miel: var(--miel);
+  --color-niebla: var(--niebla);
+  --color-blanco: var(--blanco);
+  --color-verde-hoja: var(--verde-hoja);
+  --color-verde-tinte: var(--verde-tinte);
+
+  --font-serif: var(--font-lora), Georgia, serif;
+  --font-sans: var(--font-poppins), Arial, sans-serif;
+}
+
+@theme {
+  /* Escala tipográfica fluida (móvil → desktop) */
+  --text-h1: clamp(2rem, 1.4rem + 2.6vw, 3rem);
+  --text-h1--line-height: 1.15;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h2: clamp(1.625rem, 1.35rem + 1.2vw, 2rem);
+  --text-h2--line-height: 1.2;
+  --text-h2--letter-spacing: -0.005em;
+  --text-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.375rem);
+  --text-h3--line-height: 1.3;
+  --text-quote: clamp(1.375rem, 1.2rem + 0.8vw, 1.625rem);
+  --text-quote--line-height: 1.35;
+  --text-body: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+  --text-body--line-height: 1.6;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.5;
+  --text-button: 1rem;
+  --text-button--line-height: 1;
+  --text-button--letter-spacing: 0.02em;
+  --text-menu: 0.9375rem;
+  --text-menu--line-height: 1;
+  --text-menu--letter-spacing: 0.01em;
+  --text-overline: 0.8125rem;
+  --text-overline--line-height: 1.2;
+  --text-overline--letter-spacing: 0.12em;
+
+  /* Radios */
+  --radius-pill: 9999px;
+  --radius-card: 12px;
+  --radius-block: 16px;
+  --radius-sm: 8px;
+
+  /* Única sombra permitida: elementos flotantes */
+  --shadow-soft: 0 4px 16px rgba(47, 74, 58, 0.08);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--crema);
+  color: var(--cafe);
+}
+
+:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: 3px;
+}
+
+/* Sobre fondos verdes */
+.on-dark :focus-visible {
+  outline-color: var(--miel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

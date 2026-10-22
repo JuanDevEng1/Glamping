@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&amp;family=Poppins:wght@300;400;500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container": "#efeeeb",
+            "surface-tint": "#486553",
+            "error-container": "#ffdad6",
+            "on-secondary": "#ffffff",
+            "outline": "#727973",
+            "tertiary-fixed-dim": "#ecbabc",
+            "on-error-container": "#93000a",
+            "on-background": "#1b1c1a",
+            "secondary": "#556159",
+            "on-primary-fixed": "#042013",
+            "on-secondary-fixed-variant": "#3e4942",
+            "on-tertiary-fixed-variant": "#613d3f",
+            "primary": "#466250",
+            "primary-dark": "#264634",
+            "primary-light": "#e8f0eb",
+            "primary-container": "#5e7b68",
+            "secondary-container": "#d9e6db",
+            "background": "#fbf9f6",
+            "tertiary": "#785254",
+            "outline-variant": "#c2c8c1",
+            "surface-container-lowest": "#ffffff",
+            "on-error": "#ffffff",
+            "on-primary": "#ffffff",
+            "surface": "#fbf9f6",
+            "surface-container-highest": "#e4e2e0",
+            "error": "#ba1a1a",
+            "surface-dim": "#dbdad7",
+            "inverse-surface": "#30312f",
+            "surface-container-low": "#f5f3f1",
+            "surface-container-high": "#e9e8e5",
+            "on-surface": "#1b1c1a",
+            "surface-bright": "#fbf9f6",
+            "on-surface-variant": "#424843",
+            "on-primary-container": "#f6fff5"
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "full": "9999px"
+          },
+          spacing: {
+            "gutter": "1rem",
+            "space-xl": "2rem",
+            "margin": "1.5rem",
+            "space-sm": "0.5rem",
+            "space-xs": "0.25rem",
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "margin-desktop": "2rem"
+          },
+          fontFamily: {
+            "body-md": ["Poppins", "sans-serif"],
+            "label-sm": ["Inter", "sans-serif"],
+            "headline-lg": ["Lora", "serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      main > :first-child {
+        margin-top: 0 !important;
+      }
+      main > :last-child {
+        margin-bottom: 0 !important;
+      }
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-background font-body-md text-on-surface antialiased selection:bg-primary-light selection:text-primary-dark">
+<!-- Header -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm transition-all">
+<div class="h-16 max-w-[1240px] mx-auto px-margin-desktop flex items-center justify-between gap-space-lg">
+<div class="flex items-center gap-space-lg">
+<a class="flex items-center gap-2.5 group" href="#">
+<div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[20px]">forest</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-lg text-lg font-bold tracking-tight text-on-surface leading-none">Natura Glamping</span>
+<span class="text-[10px] tracking-wider font-semibold text-secondary uppercase">San Vicente, Colombia</span>
+</div>
+</a>
+</div>
+<nav class="hidden md:flex items-center gap-1 bg-surface-container-low p-1 rounded-lg border border-outline-variant/30">
+<a class="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all py-1.5 px-4 rounded-md" data-path="nosotros" href="#">Nosotros</a>
+<a class="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all py-1.5 px-4 rounded-md" data-path="reservar-fechas" href="#">Reservar</a>
+<a aria-current="page" class="text-xs font-semibold py-1.5 px-4 bg-surface-container-lowest text-primary rounded-md shadow-sm" data-path="servicios" href="#">Servicios</a>
+</nav>
+<div class="flex items-center gap-3">
+<!-- Shopping Cart Badge -->
+<a class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors text-on-surface text-xs font-semibold shadow-2xs" data-path="carrito" href="#">
+<span class="material-symbols-outlined text-[18px] text-primary">shopping_bag</span>
+<span class="hidden sm:inline">Carrito</span>
+<span class="px-1.5 py-0.5 rounded-full bg-primary text-on-primary text-[10px] font-bold">2</span>
+</a>
+<a class="inline-flex items-center justify-center px-4 h-9 bg-primary text-on-primary text-xs font-semibold rounded-lg hover:bg-primary-dark shadow-sm transition-all" data-path="reservar-fechas" href="#">
+<span>Reservar ahora</span>
+</a>
+<div class="w-9 h-9 rounded-lg bg-surface-container border border-outline-variant/50 flex items-center justify-center text-secondary hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[19px]">person</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="w-full pt-20 min-h-screen bg-background pb-16">
+<div class="w-full max-w-[1240px] mx-auto px-margin-desktop py-space-lg flex flex-col gap-6">
+<!-- 1. Header & Context Breadcrumb -->
+<header class="flex flex-col gap-1 pb-4 border-b border-outline-variant/30">
+<div class="flex items-center gap-2 text-xs font-medium text-secondary">
+<span>Catálogo Adicional</span>
+<span class="text-outline-variant">/</span>
+<span class="text-primary font-semibold">Paso 2 de 3: Experiencias &amp; Servicios</span>
+</div>
+<h1 class="font-headline-lg text-2xl sm:text-3xl font-bold text-on-surface tracking-tight mt-1">
+          Servicios y experiencias
+        </h1>
+<p class="font-body-md text-xs sm:text-sm text-secondary max-w-3xl">
+          Complementa tu estadía con actividades locales, gastronomía de origen y comodidades exclusivas.
+        </p>
+</header>
+<!-- 2. Notice: Linked Reservation Banner -->
+<section class="w-full p-4 sm:p-5 bg-surface-container-low/90 border border-outline-variant/40 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+<div class="flex items-start md:items-center gap-3.5">
+<div class="w-10 h-10 rounded-lg bg-primary-light border border-primary/20 flex items-center justify-center text-primary shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[22px]">spa</span>
+</div>
+<div class="flex flex-col">
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="px-2 py-0.5 rounded-full bg-primary-light text-primary text-[10px] uppercase font-bold tracking-wider">Reserva Activa</span>
+<p class="text-xs sm:text-sm font-semibold text-on-surface">
+                Agrega servicios a tu reserva del <span class="text-primary font-bold">18 al 21 de Octubre, 2025</span>
+</p>
+</div>
+<div class="text-xs text-secondary mt-1 flex flex-wrap items-center gap-2 font-body-md">
+<span class="font-medium text-on-surface">Domo Estelar</span>
+<span class="text-outline-variant">•</span>
+<span class="font-mono text-[11px] text-primary-dark font-semibold">#GLAMP-94821</span>
+<span class="text-outline-variant">•</span>
+<span>2 Adultos</span>
+</div>
+</div>
+</div>
+<button class="self-start md:self-center px-4 py-2 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant/50 text-secondary hover:text-on-surface font-semibold text-xs rounded-lg transition-colors shrink-0 shadow-2xs flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">edit_calendar</span>
+<span>Cambiar reserva vinculada</span>
+</button>
+</section>
+<!-- 3. Filter and Sort Controls Bar -->
+<section class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-outline-variant/30">
+<!-- Category Chips -->
+<div class="flex flex-wrap items-center gap-2">
+<button class="px-3.5 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all" type="button">
+<span>Todos</span>
+<span class="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">12</span>
+</button>
+<button class="px-3.5 py-1.5 bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface border border-outline-variant/40 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5" type="button">
+<span>Tours</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px]">4</span>
+</button>
+<button class="px-3.5 py-1.5 bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface border border-outline-variant/40 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5" type="button">
+<span>Planes en fincas</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px]">3</span>
+</button>
+<button class="px-3.5 py-1.5 bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface border border-outline-variant/40 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5" type="button">
+<span>Comida y Gastronomía</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px]">2</span>
+</button>
+<button class="px-3.5 py-1.5 bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface border border-outline-variant/40 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5" type="button">
+<span>Decoración</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px]">2</span>
+</button>
+<button class="px-3.5 py-1.5 bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface border border-outline-variant/40 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5" type="button">
+<span>Transporte</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px]">1</span>
+</button>
+</div>
+<!-- Sorting Dropdown -->
+<div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+<label class="text-xs font-medium text-secondary" for="sort-select">Ordenar por:</label>
+<div class="relative">
+<select class="h-9 pl-3 pr-8 text-xs font-semibold bg-surface-container-lowest border border-outline-variant/50 rounded-lg appearance-none cursor-pointer focus:outline-none focus:border-primary text-on-surface shadow-2xs" id="sort-select">
+<option>Recomendados</option>
+<option>Precio: menor a mayor</option>
+<option>Precio: mayor a menor</option>
+</select>
+<span class="material-symbols-outlined text-[18px] text-secondary pointer-events-none absolute right-2.5 top-2.5">expand_more</span>
+</div>
+</div>
+</section>
+<!-- 4. 3-Column Catalog Grid -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- TARJETA 1: Cabalgata Ecológica al Mirador -->
+<article class="flex flex-col bg-surface-container-lowest border border-outline-variant/40 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+<div class="relative w-full aspect-[16/10] bg-surface-container-low overflow-hidden">
+<img alt="Cabalgata Ecológica al Mirador" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDx0GvhPe_FtlDUSiOeUSyGvBUx8kALE0MFhPGGYI1XTP5TQL2rmdI_0PXI3g2qi5jIQ8x0WmQr9-tjxPWDnt0lHpbQPoCt4RypPEampe5nM-e2xS3QkaewtMGPYuCYIxbwF3uf3Rv6Ogdf-eqiiaXRl99SLQbQftH-jSF-crKfV0iS4WBHj5-3rlklelv9F9-bYsbwdZ_mTNqcB2w2HCyEUAiBJJDJKNOn1FGCKtW46OREy6l72gnX"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+<span class="absolute top-3 left-3 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-xs rounded-md text-[11px] font-semibold text-on-surface border border-outline-variant/30 shadow-2xs">
+              Tours
+            </span>
+<span class="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Disponible
+            </span>
+</div>
+<div class="p-5 flex flex-col flex-1 justify-between gap-4">
+<div class="flex flex-col gap-1.5">
+<span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-secondary">Ref: #ACT-01</span>
+<h2 class="font-headline-lg text-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                Cabalgata Ecológica al Mirador
+              </h2>
+<div class="text-xs text-secondary space-y-0.5 pt-1">
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">storefront</span>
+<span>Prestado por: <strong class="text-on-surface font-medium">Finca La Esperanza</strong></span>
+</p>
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">schedule</span>
+<span>Duración: 2 horas</span>
+</p>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+<div class="flex items-baseline justify-between">
+<span class="text-xs text-secondary font-medium">Tarifa por persona:</span>
+<div class="text-right">
+<span class="font-headline-lg text-xl font-bold text-primary">$ 85.000</span>
+<span class="text-[11px] text-secondary"> COP</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-primary hover:bg-primary-dark text-on-primary text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add_shopping_cart</span>
+<span>Agregar al carrito</span>
+</button>
+</div>
+</div>
+</article>
+<!-- TARJETA 2: Cena Gourmet & Decoración Romántica -->
+<article class="flex flex-col bg-surface-container-lowest border-2 border-primary/50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group relative">
+<div class="relative w-full aspect-[16/10] bg-surface-container-low overflow-hidden">
+<img alt="Cena Gourmet &amp; Decoración Romántica" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5Jm15ze9EHWzS3MsCOKtT7ZPVCMAsS-GtY0RggsKrZCG-LXmq8Bbg0XNT1qyTAjD3l302HleVB1qf3yRZ2gd10B5iL7QpOdF1DaAVKBOBzFxFQbpMtgSsvCrw0mNuO_EP--E0KWeojUaejI0sn38Z-908zUbTktRDY-2wd-eaOt4HPbsFT60Xw-hVfeVKK2_MgnDA5JJwqymFZPWFgscBkLx1MDNN7PS07VFgSfZc7o73fP5cKbqz"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+<span class="absolute top-3 left-3 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-xs rounded-md text-[11px] font-semibold text-on-surface border border-outline-variant/30 shadow-2xs">
+              Comida y Decoración
+            </span>
+<span class="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+              ¡Quedan 2 cupos!
+            </span>
+</div>
+<div class="p-5 flex flex-col flex-1 justify-between gap-4">
+<div class="flex flex-col gap-1.5">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 border border-amber-200/80 text-amber-800 text-[11px] font-semibold mb-1">
+<span class="material-symbols-outlined text-[14px]">local_fire_department</span>
+<span>¡Quedan 2 cupos para tus fechas!</span>
+</div>
+<h2 class="font-headline-lg text-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                Cena Gourmet &amp; Decoración Romántica
+              </h2>
+<div class="text-xs text-secondary space-y-0.5 pt-1">
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">restaurant</span>
+<span>Prestado por: <strong class="text-on-surface font-medium">Chef Local &amp; Glamping Staff</strong></span>
+</p>
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">schedule</span>
+<span>Duración: 3 horas</span>
+</p>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+<div class="flex items-baseline justify-between">
+<span class="text-xs text-secondary font-medium">Tarifa por pareja:</span>
+<div class="text-right">
+<span class="font-headline-lg text-xl font-bold text-primary">$ 180.000</span>
+<span class="text-[11px] text-secondary"> COP</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-primary hover:bg-primary-dark text-on-primary text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add_shopping_cart</span>
+<span>Agregar al carrito</span>
+</button>
+</div>
+</div>
+</article>
+<!-- TARJETA 3: Tour de Cacao y Café Especial (Agotado) -->
+<article class="flex flex-col bg-surface-container-low/70 border border-outline-variant/40 rounded-xl overflow-hidden opacity-85 transition-opacity">
+<div class="relative w-full aspect-[16/10] bg-surface-container overflow-hidden grayscale">
+<img alt="Tour de Cacao y Café Especial" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDiR_eEivWNDwsJQa5yqb7MstH62A3k9tTimRos_G9X4f5eGwN_CThMYiwj-RcQtc_UaFQOAOoGSVSfu4LyXE_nVthgHp61_-fjpSMlQhD9OLFc-qSynSd-4x4eV51jLZDJB6X2ptDHycNf6QTGe_uCiKUeLGxs5D_StV1ys3TLxbj_-ZmW8iJlYFXjQMPvUeV-TZvNQFFe_a6SwwerIykvJBbys0ocvfQq915Uau4unUmvLkeH24bV"/>
+<div class="absolute inset-0 bg-black/30"></div>
+<span class="absolute top-3 left-3 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-xs rounded-md text-[11px] font-semibold text-secondary border border-outline-variant/30">
+              Planes en fincas
+            </span>
+<span class="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-200 text-gray-700 border border-gray-300">
+<span class="material-symbols-outlined text-[12px]">block</span>
+              Agotado
+            </span>
+</div>
+<div class="p-5 flex flex-col flex-1 justify-between gap-4">
+<div class="flex flex-col gap-1.5">
+<span class="text-[10px] font-mono uppercase tracking-wider text-secondary/70">Ref: #ACT-03</span>
+<h2 class="font-headline-lg text-lg font-bold text-secondary">
+                Tour de Cacao y Café Especial
+              </h2>
+<div class="text-xs text-secondary/80 space-y-0.5 pt-1">
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-secondary">storefront</span>
+<span>Prestado por: Hacienda Cafetera San Gabriel</span>
+</p>
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-secondary">schedule</span>
+<span>Duración: 4 horas</span>
+</p>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+<div class="flex items-baseline justify-between opacity-60">
+<span class="text-xs text-secondary font-medium">Tarifa por persona:</span>
+<div class="text-right">
+<span class="font-headline-lg text-xl font-bold line-through text-secondary">$ 110.000</span>
+<span class="text-[11px] text-secondary"> COP</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-surface-container-high text-secondary border border-outline-variant/50 text-xs font-semibold rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5" disabled="" type="button">
+<span class="material-symbols-outlined text-[16px]">do_not_disturb_on</span>
+<span>Agotado para estas fechas</span>
+</button>
+</div>
+</div>
+</article>
+<!-- TARJETA 4: Transporte Privado 4x4 -->
+<article class="flex flex-col bg-surface-container-lowest border border-outline-variant/40 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+<div class="relative w-full aspect-[16/10] bg-surface-container-low overflow-hidden">
+<img alt="Transporte Privado 4x4" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHfbdtXkD8Hw089y-btuPiavtoMgejU3ht2AuZsPNc0WURlHEDdq5GQUwB3s_S_URZ5yzMdBOkiAQfZ6AamgRdiEEJ6SVlCgAA5UJAAJKyy5zGXJjjNXxPzm_KDgBKxCNt2BxBxrRgxDxI-36xAZt1aR4eavU-uUSh8nTQQcGRevHR-srEkMEEQ8BsGUleQhTCe_XVt4gqe5_ZazDz3-a1evnEcW6k8z4P8-EO-yAnxcO1obQN76Te"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+<span class="absolute top-3 left-3 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-xs rounded-md text-[11px] font-semibold text-on-surface border border-outline-variant/30 shadow-2xs">
+              Transporte
+            </span>
+<span class="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Disponible
+            </span>
+</div>
+<div class="p-5 flex flex-col flex-1 justify-between gap-4">
+<div class="flex flex-col gap-1.5">
+<span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-secondary">Ref: #TRA-04</span>
+<h2 class="font-headline-lg text-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                Transporte Privado 4x4 (Terminal - Glamping)
+              </h2>
+<div class="text-xs text-secondary space-y-0.5 pt-1">
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">directions_car</span>
+<span>Prestado por: <strong class="text-on-surface font-medium">Cooperativa Rural</strong></span>
+</p>
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">schedule</span>
+<span>Duración: 45 min (hasta 4 pasajeros)</span>
+</p>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+<div class="flex items-baseline justify-between">
+<span class="text-xs text-secondary font-medium">Tarifa por trayecto:</span>
+<div class="text-right">
+<span class="font-headline-lg text-xl font-bold text-primary">$ 90.000</span>
+<span class="text-[11px] text-secondary"> COP</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-primary hover:bg-primary-dark text-on-primary text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add_shopping_cart</span>
+<span>Agregar al carrito</span>
+</button>
+</div>
+</div>
+</article>
+<!-- TARJETA 5: Cesta Picnic Campestre Artesanal -->
+<article class="flex flex-col bg-surface-container-lowest border border-outline-variant/40 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+<div class="relative w-full aspect-[16/10] bg-surface-container-low overflow-hidden">
+<img alt="Cesta Picnic Campestre Artesanal" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2Lf4CbSZ4cYDJD0cWUzlVaGuBS9_nojXQx12KWgmw4V3aCSNs1VPzLz65YNWAj2-tF-gNSlWGKP85UhJ-DqJmugzKZnsv4SA1KDTiey61ze9j0ZbCSJ2YFPhY_YULoo8Wfs457HpD3HNQjsNVUWUppsXYZqQTyeXkN4r6Jw8rm9L3kRGViNDdF2Y1Q3QC5hJFxY-ohvRiJKfhoiw7vUdBz1xzBOynxIL5_oaV_QK_yMPN5pXuwZFI"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+<span class="absolute top-3 left-3 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-xs rounded-md text-[11px] font-semibold text-on-surface border border-outline-variant/30 shadow-2xs">
+              Comida
+            </span>
+<span class="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Disponible
+            </span>
+</div>
+<div class="p-5 flex flex-col flex-1 justify-between gap-4">
+<div class="flex flex-col gap-1.5">
+<span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-secondary">Ref: #COM-02</span>
+<h2 class="font-headline-lg text-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                Cesta Picnic Campestre Artesanal
+              </h2>
+<div class="text-xs text-secondary space-y-0.5 pt-1">
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">bakery_dining</span>
+<span>Prestado por: <strong class="text-on-surface font-medium">Panadería &amp; Huerto San José</strong></span>
+</p>
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">alarm</span>
+<span>Entrega coordinada: 13:00 hrs</span>
+</p>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+<div class="flex items-baseline justify-between">
+<span class="text-xs text-secondary font-medium">Tarifa por pareja:</span>
+<div class="text-right">
+<span class="font-headline-lg text-xl font-bold text-primary">$ 70.000</span>
+<span class="text-[11px] text-secondary"> COP</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-primary hover:bg-primary-dark text-on-primary text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add_shopping_cart</span>
+<span>Agregar al carrito</span>
+</button>
+</div>
+</div>
+</article>
+<!-- TARJETA 6: Taller de Alfarería y Torno de Barro -->
+<article class="flex flex-col bg-surface-container-lowest border border-outline-variant/40 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+<div class="relative w-full aspect-[16/10] bg-surface-container-low overflow-hidden">
+<img alt="Taller de Alfarería y Torno de Barro" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBE0ht0bSItGU32RmNzzoqKQjiPe97mvr-chItfqJkP2Y7oYokS0_2UQpkvBoRIePiWX-V2XBLdWg8lh3qU1CZEcwd0XxNZ6zbDFSRQEeYwduyOpiAtqequGZW-PLwWO2_gITp-1DzjB9iNI3F9ShwSPojoxn7zNlrjB4QUn4khU3ozDwSeLFcK9XXNcy3G-xdf-Cj3VxD5eczk3qunbMDBJP699qwtJGjhQjdDb_NtePEV8Y7n2n0O"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+<span class="absolute top-3 left-3 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-xs rounded-md text-[11px] font-semibold text-on-surface border border-outline-variant/30 shadow-2xs">
+              Planes en fincas
+            </span>
+<span class="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              Disponible
+            </span>
+</div>
+<div class="p-5 flex flex-col flex-1 justify-between gap-4">
+<div class="flex flex-col gap-1.5">
+<span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-secondary">Ref: #TAL-08</span>
+<h2 class="font-headline-lg text-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                Taller de Alfarería y Torno de Barro
+              </h2>
+<div class="text-xs text-secondary space-y-0.5 pt-1">
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">brush</span>
+<span>Prestado por: <strong class="text-on-surface font-medium">Taller Artesanal Raíces</strong></span>
+</p>
+<p class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">schedule</span>
+<span>Duración: 2.5 horas</span>
+</p>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+<div class="flex items-baseline justify-between">
+<span class="text-xs text-secondary font-medium">Tarifa por persona:</span>
+<div class="text-right">
+<span class="font-headline-lg text-xl font-bold text-primary">$ 65.000</span>
+<span class="text-[11px] text-secondary"> COP</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-primary hover:bg-primary-dark text-on-primary text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add_shopping_cart</span>
+<span>Agregar al carrito</span>
+</button>
+</div>
+</div>
+</article>
+</section>
+<!-- 5. Pagination & Indicator Section -->
+<footer class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 pb-4 border-t border-outline-variant/30 mt-2">
+<div class="text-xs text-secondary flex items-center gap-1.5">
+<span>Mostrando</span>
+<span class="font-semibold text-on-surface">6 de 12</span>
+<span>experiencias disponibles</span>
+</div>
+<nav aria-label="Pagination" class="flex items-center gap-1.5">
+<button class="px-3 py-1.5 border border-outline-variant/40 bg-surface-container-low text-secondary text-xs font-medium rounded-lg cursor-not-allowed opacity-70 flex items-center gap-1" disabled="" type="button">
+<span class="material-symbols-outlined text-[14px]">chevron_left</span>
+<span>Anterior</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-primary text-on-primary text-xs font-bold flex items-center justify-center shadow-xs" type="button">
+            1
+          </button>
+<button class="w-8 h-8 rounded-lg border border-outline-variant/50 bg-surface-container-lowest text-on-surface hover:bg-surface-container text-xs font-semibold flex items-center justify-center transition-colors" type="button">
+            2
+          </button>
+<button class="px-3 py-1.5 border border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container text-on-surface text-xs font-medium rounded-lg transition-colors flex items-center gap-1" type="button">
+<span>Siguiente</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</button>
+</nav>
+</footer>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full bg-surface-container-lowest border-t border-outline-variant/30 py-space-xl mt-space-xl">
+<div class="max-w-[1240px] mx-auto px-margin-desktop">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-lg pb-space-lg border-b border-outline-variant/20">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<div class="w-6 h-6 rounded bg-primary text-on-primary flex items-center justify-center text-xs">
+<span class="material-symbols-outlined text-[15px]">forest</span>
+</div>
+<span class="text-sm font-bold text-on-surface">Natura Glamping</span>
+</div>
+<p class="text-xs text-secondary mb-1">Contacto: reservas@naturaglamping.com | +57 (300) 123-4567</p>
+<p class="text-xs text-secondary">Vereda El Retiro, San Vicente Ferrer, Antioquia, Colombia</p>
+</div>
+<div>
+<span class="text-xs font-bold text-on-surface uppercase tracking-wider block mb-2">Navegación</span>
+<ul class="space-y-1.5 text-xs text-secondary">
+<li><a class="hover:text-primary transition-colors" data-path="nosotros" href="#">Sobre Nosotros</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="servicios" href="#">Catálogo de Domos &amp; Servicios</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="reservar-fechas" href="#">Iniciar Reserva</a></li>
+</ul>
+</div>
+<div>
+<span class="text-xs font-bold text-on-surface uppercase tracking-wider block mb-2">Legal &amp; Soporte</span>
+<ul class="space-y-1.5 text-xs text-secondary">
+<li><a class="hover:text-primary transition-colors" data-path="terminos-condiciones" href="#">Términos y Condiciones</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="politica-privacidad" href="#">Política de Cancelación &amp; Privacidad</a></li>
+<li><a class="hover:text-primary transition-colors" data-path="preguntas-frecuentes" href="#">Preguntas Frecuentes</a></li>
+</ul>
+</div>
+</div>
+<div class="pt-space-md flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-secondary">
+<p>© 2025 Natura Glamping Prototype. Fidelity Modern Design System.</p>
+<p class="text-[11px] text-secondary/80">Todos los derechos reservados. Reservas seguras SSL.</p>
+</div>
+</div>
+</footer>
+</body></html>

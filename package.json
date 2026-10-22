@@ -1,0 +1,23 @@
+{
+  "name": "lauburu-glamping",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @lauburu/frontend",
+    "build": "npm run build -w @lauburu/frontend",
+    "start": "npm run start -w @lauburu/frontend",
+    "lint": "npm run lint -w @lauburu/frontend && npm run typecheck -w @lauburu/backend",
+    "test": "npm run test -w @lauburu/backend",
+    "format": "prettier --write .",
+    "db:generate": "npm run db:generate -w @lauburu/backend",
+    "db:migrate": "npm run db:migrate -w @lauburu/backend",
+    "db:seed": "npm run db:seed -w @lauburu/backend",
+    "db:seed:ejemplo": "npm run db:seed:ejemplo -w @lauburu/backend"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  }
+}

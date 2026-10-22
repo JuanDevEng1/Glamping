@@ -1,0 +1,413 @@
+{
+  "id": "458a2f28-02ed-416d-ba2c-88545af1a6d8",
+  "prevId": "4d16ed65-d386-4c7b-82e5-49d630263586",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.ajustes_fecha": {
+      "name": "ajustes_fecha",
+      "schema": "",
+      "columns": {
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "precio": {
+          "name": "precio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bloqueada": {
+          "name": "bloqueada",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.configuracion": {
+      "name": "configuracion",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "precio_base": {
+          "name": "precio_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_alto": {
+          "name": "precio_alto",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_persona_extra": {
+          "name": "precio_persona_extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_huespedes": {
+          "name": "max_huespedes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 6
+        },
+        "huespedes_incluidos": {
+          "name": "huespedes_incluidos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "hora_checkin": {
+          "name": "hora_checkin",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'15:00'"
+        },
+        "hora_checkout": {
+          "name": "hora_checkout",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'12:00'"
+        },
+        "minimo_noches_puente": {
+          "name": "minimo_noches_puente",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "version_terminos": {
+          "name": "version_terminos",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1'"
+        },
+        "minutos_hold": {
+          "name": "minutos_hold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 20
+        },
+        "noche_festivo_alta": {
+          "name": "noche_festivo_alta",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "configuracion_fila_unica": {
+          "name": "configuracion_fila_unica",
+          "value": "\"configuracion\".\"id\" = 1"
+        },
+        "configuracion_montos_positivos": {
+          "name": "configuracion_montos_positivos",
+          "value": "\"configuracion\".\"precio_base\" > 0 and \"configuracion\".\"precio_alto\" > 0 and \"configuracion\".\"precio_persona_extra\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.festivos": {
+      "name": "festivos",
+      "schema": "",
+      "columns": {
+        "fecha": {
+          "name": "fecha",
+          "type": "date",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.reservas": {
+      "name": "reservas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_llegada": {
+          "name": "fecha_llegada",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_salida": {
+          "name": "fecha_salida",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "huespedes": {
+          "name": "huespedes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pendiente'"
+        },
+        "total_cop": {
+          "name": "total_cop",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "desglose": {
+          "name": "desglose",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "correo": {
+          "name": "correo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefono": {
+          "name": "telefono",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo_documento": {
+          "name": "tipo_documento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "documento": {
+          "name": "documento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pais": {
+          "name": "pais",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ciudad": {
+          "name": "ciudad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "comentarios": {
+          "name": "comentarios",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pasarela": {
+          "name": "pasarela",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expira_en": {
+          "name": "expira_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terminos_version": {
+          "name": "terminos_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acepta_marketing": {
+          "name": "acepta_marketing",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "creada_en": {
+          "name": "creada_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "reservas_codigo_unique": {
+          "name": "reservas_codigo_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "codigo"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "reservas_fechas": {
+          "name": "reservas_fechas",
+          "value": "\"reservas\".\"fecha_salida\" > \"reservas\".\"fecha_llegada\""
+        },
+        "reservas_huespedes": {
+          "name": "reservas_huespedes",
+          "value": "\"reservas\".\"huespedes\" between 1 and 6"
+        },
+        "reservas_estado": {
+          "name": "reservas_estado",
+          "value": "\"reservas\".\"estado\" in ('pendiente', 'confirmada', 'cancelada', 'expirada')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.temporadas": {
+      "name": "temporadas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_inicio": {
+          "name": "fecha_inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_fin": {
+          "name": "fecha_fin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_noche": {
+          "name": "precio_noche",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_persona_extra": {
+          "name": "precio_persona_extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "minimo_noches": {
+          "name": "minimo_noches",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "temporadas_rango": {
+          "name": "temporadas_rango",
+          "value": "\"temporadas\".\"fecha_fin\" >= \"temporadas\".\"fecha_inicio\""
+        },
+        "temporadas_precio": {
+          "name": "temporadas_precio",
+          "value": "\"temporadas\".\"precio_noche\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

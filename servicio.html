@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<!--
+  Maqueta estática de /servicios/[servicio] · Lauburu Glamping.
+  Sigue REGLAS_WEB.md. Al pasar a Next.js: fuentes con next/font (no <link>),
+  imágenes con next/image, tokens en app/globals.css e íconos con lucide-react.
+  Las imágenes son de ejemplo: TODO(cliente) reemplazar por fotos reales.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Cabalgata al mirador · Lauburu Glamping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&amp;family=Poppins:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Equivalente a los tokens de app/globals.css (REGLAS_WEB.md §1–4).
+  tailwind.config = {
+    theme: {
+      colors: {
+        transparent: "transparent",
+        current: "currentColor",
+        verde: "#2F4A3A",
+        cafe: "#5B3A29",
+        terracota: "#B5563A",
+        crema: "#F3EBDD",
+        miel: "#D9A441",
+        niebla: "#C9D1CB",
+        blanco: "#FFFFFF",
+        "terracota-oscuro": "#9E4A31",
+        "verde-hoja": "#3A5747",
+        "verde-tinte": "#E4E9E5",
+      },
+      fontFamily: {
+        serif: ["Lora", "Georgia", "serif"],
+        sans: ["Poppins", "Arial", "sans-serif"],
+      },
+      extend: {
+        fontSize: {
+          h1: ["clamp(2rem, 1.4rem + 2.6vw, 3rem)", { lineHeight: "1.15", letterSpacing: "-0.01em" }],
+          h2: ["clamp(1.625rem, 1.35rem + 1.2vw, 2rem)", { lineHeight: "1.2", letterSpacing: "-0.005em" }],
+          h3: ["clamp(1.25rem, 1.15rem + 0.4vw, 1.375rem)", { lineHeight: "1.3" }],
+          body: ["clamp(1rem, 0.95rem + 0.25vw, 1.125rem)", { lineHeight: "1.6" }],
+          small: ["0.875rem", { lineHeight: "1.5" }],
+          button: ["1rem", { lineHeight: "1", letterSpacing: "0.02em" }],
+          overline: ["0.8125rem", { lineHeight: "1.2", letterSpacing: "0.12em" }],
+          menu: ["0.9375rem", { lineHeight: "1", letterSpacing: "0.01em" }],
+        },
+        borderRadius: { card: "12px", block: "16px" },
+        boxShadow: { soft: "0 4px 16px rgba(47, 74, 58, 0.08)" },
+      },
+    },
+  };
+</script>
+<style>
+  :root { color-scheme: light; }
+  body { background-color: #F3EBDD; color: #5B3A29; }
+  :focus-visible { outline: 2px solid #2F4A3A; outline-offset: 3px; }
+  .on-dark :focus-visible { outline-color: #D9A441; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body class="font-sans text-body antialiased">
+
+<a href="#contenido" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-crema focus:px-6 focus:py-3 focus:text-verde">Saltar al contenido</a>
+
+<!-- Header -->
+<header class="on-dark sticky top-0 z-50 bg-verde text-crema">
+  <div class="mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between px-4 sm:px-8 md:h-[72px] lg:px-16">
+    <a href="#" class="flex items-center gap-2" aria-label="Lauburu Glamping, inicio">
+      <!-- Logo original, sin redibujar (REGLAS_WEB.md §6) -->
+      <img src="frontend/public/brand/lauburu-simbolo-negativo.svg" alt="" class="h-8 w-8"/>
+      <span class="font-serif text-xl tracking-wide">LAUBURU</span>
+    </a>
+
+    <nav aria-label="Principal" class="hidden items-center gap-8 md:flex">
+      <a href="#" class="text-menu text-crema hover:underline hover:underline-offset-8">Nosotros</a>
+      <a href="#" aria-current="page" class="border-b-2 border-miel pb-1 text-menu text-crema">Servicios</a>
+      <a href="#" class="flex items-center gap-2 text-menu text-crema hover:underline hover:underline-offset-8">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        Carrito (2)
+      </a>
+      <a href="#" class="inline-flex h-12 items-center rounded-full bg-terracota px-8 text-button font-medium text-crema transition-colors duration-200 hover:bg-terracota-oscuro active:scale-[0.98]">Reservar</a>
+    </nav>
+
+    <div class="flex items-center gap-2 md:hidden">
+      <a href="#" class="inline-flex h-11 items-center rounded-full bg-terracota px-5 text-button font-medium text-crema transition-colors duration-200 hover:bg-terracota-oscuro">Reservar</a>
+      <button type="button" id="abrir-menu" aria-expanded="false" aria-controls="menu-movil" aria-label="Abrir menú" class="flex h-11 w-11 items-center justify-center rounded-full text-crema">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <nav id="menu-movil" aria-label="Principal" hidden class="fixed inset-0 top-16 z-50 bg-verde px-4 py-8 md:hidden">
+    <ul class="flex flex-col gap-6 text-xl">
+      <li><a href="#" class="text-crema">Nosotros</a></li>
+      <li><a href="#" aria-current="page" class="border-b-2 border-miel pb-1 text-crema">Servicios</a></li>
+      <li><a href="#" class="text-crema">Carrito (2)</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="contenido">
+  <!-- Detalle del servicio -->
+  <section aria-labelledby="titulo-servicio" class="pb-12 pt-6 md:pb-24 md:pt-8">
+    <div class="mx-auto w-full max-w-[1200px] px-4 sm:px-8 lg:px-16">
+
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <nav aria-label="Miga de pan">
+          <ol class="flex flex-wrap items-center gap-2 text-small">
+            <li><a href="#" class="text-terracota-oscuro underline underline-offset-4 hover:text-terracota">Inicio</a></li>
+            <li aria-hidden="true">/</li>
+            <li><a href="#" class="text-terracota-oscuro underline underline-offset-4 hover:text-terracota">Servicios</a></li>
+            <li aria-hidden="true">/</li>
+            <li aria-current="page">Cabalgata al mirador</li>
+          </ol>
+        </nav>
+        <a href="#" class="inline-flex items-center gap-2 text-small text-terracota-oscuro underline underline-offset-4 hover:text-terracota">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          Volver a servicios
+        </a>
+      </div>
+
+      <div class="mt-8 grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-12">
+
+        <!-- Columna de contenido -->
+        <div class="flex flex-col gap-8 lg:col-span-7">
+
+          <!-- Galería -->
+          <div class="flex flex-col gap-2">
+            <div class="aspect-[3/2] overflow-hidden rounded-block bg-niebla">
+              <img id="foto-principal" class="h-full w-full object-cover" alt="Caballos en un sendero de montaña rodeado de bosque de niebla" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCix515IuqP9C-RMK2FePeWXsW7Po8vaNUul5UCkkBBGk0F5_7e1BsFyP7ERlMJ3qNL-IOzDqCFpGkkig2toCfHqilG-njYto4_uj-JwQ-EaFC4LHfb2e_K3IYQBfAT6zgEAnb9vUpnpZH3K8CWu0iLO6oU-sLg8Yt4tfx9jCOGF7O_8Bmu8MN2M_Dd5KGYGmVslZTp2dmZQ31Kr5d7P3Yxa84NwV1gLfyYjKe76rpSucKqL9c8YVsu"/>
+            </div>
+            <div class="grid grid-cols-4 gap-2" role="group" aria-label="Más fotos">
+              <button type="button" data-miniatura aria-pressed="true" class="aspect-[4/3] overflow-hidden rounded-card border-2 border-verde bg-niebla">
+                <img class="h-full w-full object-cover" alt="Caballos en un sendero de montaña rodeado de bosque de niebla" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCix515IuqP9C-RMK2FePeWXsW7Po8vaNUul5UCkkBBGk0F5_7e1BsFyP7ERlMJ3qNL-IOzDqCFpGkkig2toCfHqilG-njYto4_uj-JwQ-EaFC4LHfb2e_K3IYQBfAT6zgEAnb9vUpnpZH3K8CWu0iLO6oU-sLg8Yt4tfx9jCOGF7O_8Bmu8MN2M_Dd5KGYGmVslZTp2dmZQ31Kr5d7P3Yxa84NwV1gLfyYjKe76rpSucKqL9c8YVsu"/>
+              </button>
+              <button type="button" data-miniatura aria-pressed="false" class="aspect-[4/3] overflow-hidden rounded-card border-2 border-transparent bg-niebla transition-colors duration-200 hover:border-niebla">
+                <img class="h-full w-full object-cover" alt="Vista panorámica de la cordillera desde el mirador" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkzFGvUCBbGF42RLYK3-KnggtlWu9VvCM5fMOXO0nI9rNv2CNB2VxqJL_qzI9csMKn25f1QOAfSeHkq7PsQ2VYOvoUwRXitGGkfP8oF-8noB3T41lSChLK2gBggJFSEGP-VKepbvXcGOekALX1DL0DLuHxqXXIljArfoVoDiFTSOl3K7cEU4I89YOTB8dtAfGHC0s7Etw8dNLlTHRQ0NDzOeLxHwRZQhxJwx14OkUp_MS4ybxeOpld"/>
+              </button>
+              <button type="button" data-miniatura aria-pressed="false" class="aspect-[4/3] overflow-hidden rounded-card border-2 border-transparent bg-niebla transition-colors duration-200 hover:border-niebla">
+                <img class="h-full w-full object-cover" alt="Café campesino preparado en fogón de leña" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqWPP4OL_XI2HLTyLnHA2ELnwPCvOQoNexnQehLoaNs5UmE_KvtHYzI0Xxt1JDrSl9bymhAGrEzKhFx10_ObYG7P_I2LdZZOLTyW7g-_lchKEkWhfkJfCQN1BlqTwXjm4Cj_CE1KXWgYc6KofCv5FuzpRB82uIy8aKnfXJahZ4UavNt5jvnU6JIzVaTp72ucEwppJKuzuO_xBzB5DgTo79h6qcKrqz5JhRV0PG3qO1S_bVTqlSlxFT"/>
+              </button>
+              <button type="button" data-miniatura aria-pressed="false" class="aspect-[4/3] overflow-hidden rounded-card border-2 border-transparent bg-niebla transition-colors duration-200 hover:border-niebla">
+                <img class="h-full w-full object-cover" alt="Guía local junto a los caballos ensillados" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvaqGMnzasJ-RAYMCJQgeIBzTX9hpS2w0vaDbwEUlZmhTzBNsB-DIkHS7sBFU_OskZrWpCnBjH_vMq1X-ynzb1_RQ7AYN3xPWFf5WSXnQ8N3gTcHp7Q7uYMVh8qf6EqmdyuRITCfPBhpBA6oT1Xcsk0yEfyLUvgMk8xF_aBUpIgU6dojBIKAnBLTZv4OEDi6kIdD0EH44jMAwFZRE3y_fk3E2hNiIRlil3K9JBy7nlMVlCRLcrokR5"/>
+              </button>
+            </div>
+          </div>
+
+          <!-- Encabezado y descripción -->
+          <div class="flex flex-col gap-4 border-b border-niebla pb-8">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-overline font-medium uppercase text-terracota-oscuro">Recorridos con fincas aliadas</span>
+              <span class="rounded-full border border-terracota px-3 py-1 text-xs font-medium text-terracota-oscuro">Extra</span>
+            </div>
+            <h1 id="titulo-servicio" class="font-serif text-h1 text-verde">Cabalgata al mirador</h1>
+
+            <!-- TODO(cliente): confirmar finca aliada, duración, dificultad y punto de encuentro -->
+            <dl class="grid grid-cols-1 gap-4 rounded-card border border-niebla bg-blanco p-5 text-small sm:grid-cols-2 md:p-6">
+              <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>
+                <dt class="font-medium text-verde">Lo ofrece:</dt><dd>Finca aliada de la vereda</dd>
+              </div>
+              <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <dt class="font-medium text-verde">Duración:</dt><dd>2 horas y media</dd>
+              </div>
+              <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <dt class="font-medium text-verde">Nivel:</dt><dd>Moderado, apto para principiantes</dd>
+              </div>
+              <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                <dt class="font-medium text-verde">Encuentro:</dt><dd>Entrada del glamping</dd>
+              </div>
+            </dl>
+
+            <!-- TODO(cliente): texto definitivo del aliado -->
+            <p class="max-w-[65ch]">Recorre a caballo los caminos de herradura de la vereda Cuchilla del Salado, entre cafetales y bosque de niebla, hasta un mirador con vista a las montañas de Manizales. Te acompaña un guía local todo el camino y, en la cima, compartimos un refrigerio y un café de la zona preparado en fogón de leña.</p>
+          </div>
+
+          <!-- Incluye / no incluye -->
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+            <section aria-labelledby="titulo-incluye" class="rounded-card border border-miel bg-blanco p-5 md:p-6">
+              <h2 id="titulo-incluye" class="font-serif text-h3 text-verde">Qué incluye</h2>
+              <ul class="mt-4 flex flex-col gap-2 text-small">
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Caballo manso con montura cómoda</li>
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Casco de protección</li>
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Guía local durante todo el recorrido</li>
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Refrigerio y café en el mirador</li>
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Póliza de asistencia</li>
+              </ul>
+            </section>
+            <section aria-labelledby="titulo-no-incluye" class="rounded-card border border-niebla bg-blanco p-5 md:p-6">
+              <h2 id="titulo-no-incluye" class="font-serif text-h3 text-verde">Qué no incluye</h2>
+              <ul class="mt-4 flex flex-col gap-2 text-small">
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-cafe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>Propinas para el guía</li>
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-cafe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>Calzado cerrado y ropa para lluvia (te recomendamos traerlos)</li>
+                <li class="flex items-start gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-cafe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>Transporte desde Manizales</li>
+              </ul>
+            </section>
+          </div>
+
+          <!-- Condiciones -->
+          <section aria-labelledby="titulo-condiciones" class="rounded-card border border-niebla bg-verde-tinte p-5 md:p-6">
+            <h2 id="titulo-condiciones" class="flex items-center gap-2 font-serif text-h3 text-verde">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              Antes de reservar
+            </h2>
+            <!-- TODO(cliente): confirmar condiciones con el aliado -->
+            <dl class="mt-4 flex flex-col gap-4 text-small">
+              <div><dt class="font-medium text-verde">Edad mínima</dt><dd class="mt-1">Desde los 8 años, en compañía de un adulto.</dd></div>
+              <div><dt class="font-medium text-verde">Clima</dt><dd class="mt-1">Con llovizna salimos igual y te prestamos poncho. Si hay tormenta eléctrica, cambiamos la fecha sin costo.</dd></div>
+              <div><dt class="font-medium text-verde">Cancelación</dt><dd class="mt-1">Puedes cancelar o cambiar la fecha gratis hasta 24 horas antes del turno.</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <!-- Tarjeta de compra -->
+        <aside aria-labelledby="titulo-compra" class="lg:sticky lg:top-24 lg:col-span-5">
+          <form class="flex flex-col gap-6 rounded-block border border-niebla bg-blanco p-5 md:p-6" action="#" onsubmit="return false">
+            <h2 id="titulo-compra" class="sr-only">Agregar al carrito</h2>
+            <!-- El precio final lo calcula el servidor (backend/src/precios.ts); aquí solo se muestra. -->
+            <p class="border-b border-niebla pb-4">
+              <span class="text-h2 font-bold text-verde">$85.000 COP</span>
+              <span class="text-small"> por persona</span>
+            </p>
+
+            <fieldset>
+              <legend class="text-small font-medium text-verde">Fecha (dentro de tu estadía)</legend>
+              <div class="mt-2 flex flex-col gap-2">
+                <label class="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-card border border-niebla px-4 py-3 transition-colors duration-200 has-[:checked]:border-2 has-[:checked]:border-verde">
+                  <span class="flex items-center gap-2">
+                    <input type="radio" name="fecha" value="2026-10-23" checked class="h-5 w-5 accent-verde"/>
+                    <span>Viernes 23 de octubre</span>
+                  </span>
+                  <span class="text-small">4 cupos</span>
+                </label>
+                <label class="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-card border border-niebla px-4 py-3 transition-colors duration-200 has-[:checked]:border-2 has-[:checked]:border-verde">
+                  <span class="flex items-center gap-2">
+                    <input type="radio" name="fecha" value="2026-10-24" class="h-5 w-5 accent-verde"/>
+                    <span>Sábado 24 de octubre</span>
+                  </span>
+                  <span class="text-small">1 cupo</span>
+                </label>
+                <label class="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-card border border-niebla px-4 py-3 transition-colors duration-200 has-[:checked]:border-2 has-[:checked]:border-verde">
+                  <span class="flex items-center gap-2">
+                    <input type="radio" name="fecha" value="2026-10-25" class="h-5 w-5 accent-verde"/>
+                    <span>Domingo 25 de octubre</span>
+                  </span>
+                  <span class="text-small">6 cupos</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend class="text-small font-medium text-verde">Turno</legend>
+              <div class="mt-2 grid grid-cols-2 gap-2">
+                <label class="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-card border border-niebla px-4 transition-colors duration-200 has-[:checked]:border-2 has-[:checked]:border-verde">
+                  <input type="radio" name="turno" value="manana" checked class="h-5 w-5 accent-verde"/>
+                  <span>9:00 a. m.</span>
+                </label>
+                <label class="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-card border border-niebla px-4 transition-colors duration-200 has-[:checked]:border-2 has-[:checked]:border-verde">
+                  <input type="radio" name="turno" value="tarde" class="h-5 w-5 accent-verde"/>
+                  <span>3:00 p. m.</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div>
+              <div class="flex items-baseline justify-between gap-4">
+                <span id="etiqueta-personas" class="text-small font-medium text-verde">Personas</span>
+                <span class="text-small">Máximo 4 por turno</span>
+              </div>
+              <div class="mt-2 flex items-center justify-between rounded-card border border-niebla p-1" role="group" aria-labelledby="etiqueta-personas">
+                <button type="button" id="menos" aria-label="Quitar una persona" class="flex h-11 w-11 items-center justify-center rounded-full text-verde transition-colors duration-200 hover:bg-verde-tinte disabled:cursor-not-allowed disabled:opacity-50">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+                </button>
+                <output id="personas" aria-live="polite" class="font-medium text-verde">2 personas</output>
+                <button type="button" id="mas" aria-label="Agregar una persona" class="flex h-11 w-11 items-center justify-center rounded-full text-verde transition-colors duration-200 hover:bg-verde-tinte disabled:cursor-not-allowed disabled:opacity-50">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <dl class="flex flex-col gap-2 rounded-card bg-crema p-4 text-small">
+              <div class="flex justify-between gap-4"><dt id="detalle-subtotal">2 × $85.000</dt><dd id="subtotal">$170.000 COP</dd></div>
+              <div class="flex justify-between gap-4"><dt>Impuestos</dt><dd>Incluidos</dd></div>
+              <div class="mt-2 flex justify-between gap-4 border-t border-niebla pt-2 text-body font-medium text-verde"><dt>Total</dt><dd id="total">$170.000 COP</dd></div>
+            </dl>
+
+            <div class="flex flex-col gap-4">
+              <button type="submit" class="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-terracota px-8 text-button font-medium text-crema transition-colors duration-200 hover:bg-terracota-oscuro active:scale-[0.98]">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                Agregar al carrito
+              </button>
+              <p class="flex items-start gap-2 text-small">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-4 w-4 shrink-0 text-verde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                Todavía no te cobramos nada. Pagas cuando finalices tu carrito y el servicio queda ligado a tu reserva.
+              </p>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recomendados -->
+  <section aria-labelledby="titulo-recomendados" class="bg-verde-tinte py-12 md:py-24">
+    <div class="mx-auto w-full max-w-[1200px] px-4 sm:px-8 lg:px-16">
+      <div class="text-center">
+        <p class="text-overline font-medium uppercase text-terracota-oscuro">Para tu estadía</p>
+        <h2 id="titulo-recomendados" class="mt-2 font-serif text-h2 text-verde">Complementa tu experiencia</h2>
+      </div>
+
+      <!-- TODO(cliente): servicios, precios y fotos reales -->
+      <div class="mt-8 grid grid-cols-1 gap-4 md:mt-12 md:grid-cols-3 md:gap-6">
+        <article class="flex h-full flex-col overflow-hidden rounded-card border border-miel bg-crema">
+          <div class="aspect-[3/2] bg-niebla">
+            <img class="h-full w-full object-cover" alt="Cena servida junto a una fogata al anochecer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTiMTu8HVKF9T04bitC94ZjUBsWYo3C7qLDUvniUg7Yk_OXclrxKZpHQMdhSpVLYWzpIIcV3vPXIQG_jbzM1PUyYd2f8DT9pDer3ZzxQGfHfIL-FgoZt9YPb7wJkQEmggr6njCNiHy70RbYdDqVbxjN6g_QjEnkGMUc0veNW4b_7V8UXQ8cLE0Dos7KgAL-QCm4lTBYPa6rvfNudkXXMafPy4b_xNdMfJpFRTsJlshXHXtuzF6y1_E"/>
+          </div>
+          <div class="flex flex-1 flex-col gap-2 p-5 md:p-6">
+            <span class="w-fit rounded-full border border-terracota px-3 py-1 text-xs font-medium text-terracota-oscuro">Extra</span>
+            <h3 class="font-serif text-h3 text-verde">Cena junto a la fogata</h3>
+            <p class="text-small">Menú de tres tiempos preparado al fuego, con vino de la casa.</p>
+            <div class="mt-auto flex items-center justify-between gap-4 pt-4">
+              <span class="font-bold text-verde">$180.000 COP <span class="text-small font-normal text-cafe">por pareja</span></span>
+              <a href="#" class="text-small text-terracota-oscuro underline underline-offset-4 hover:text-terracota">Ver detalle</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="flex h-full flex-col overflow-hidden rounded-card border border-miel bg-crema">
+          <div class="aspect-[3/2] bg-niebla">
+            <img class="h-full w-full object-cover" alt="Canasta de picnic con quesos, pan y frutas sobre una manta en la montaña" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqGz28sLkfY0YFxdJSTGnlAFmak0K0rkjCxPFe2PM-4trWFd90qM9GfG2l-TyOLN2Brxeiv0v3s2s39MkmbWR2icq1d1SUR5rxu__nAa5qnUxNMvIbmlz_H3FGiLBX9pzmhCCiMvoUK8WSAJrtnklEcCltXzLvG5ugcTjf68X1GtdF2XmgawpNVUOlY-62Cxiu70xyyPnPrKUcJoRDVdb2jTAM5lufaXzsTDW3S_NOVrOtAft7vQYa"/>
+          </div>
+          <div class="flex flex-1 flex-col gap-2 p-5 md:p-6">
+            <span class="w-fit rounded-full border border-terracota px-3 py-1 text-xs font-medium text-terracota-oscuro">Extra</span>
+            <h3 class="font-serif text-h3 text-verde">Picnic en el mirador</h3>
+            <p class="text-small">Canasta con quesos, pan de masa madre y frutas de la región.</p>
+            <div class="mt-auto flex items-center justify-between gap-4 pt-4">
+              <span class="font-bold text-verde">$70.000 COP <span class="text-small font-normal text-cafe">por pareja</span></span>
+              <a href="#" class="text-small text-terracota-oscuro underline underline-offset-4 hover:text-terracota">Ver detalle</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="flex h-full flex-col overflow-hidden rounded-card border border-miel bg-crema">
+          <div class="aspect-[3/2] bg-niebla">
+            <img class="h-full w-full object-cover" alt="Camioneta 4x4 en un camino rural de montaña" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAk6v5hTz7NLpXokWdqic1A2I8ATTwaQo5D6yuSVxRT9Uy6EEFBiTWIx6v5sZxn5-35TK-0Z3fWhKjQcA7pwTv6u9RocaHPT9np3fND3nrrWzt6HWT4Iddmf1pt3wGuO4pEtDSiIBxO1gak1KoRrA9WFGTQvHZbjFNrZRfm2m5X-oyaeJTo3-UHY5w4pc300H9T3gmpi2BTuGzbay2dhiqdWvLUHROKp076RHfIA60vyaGU-pg1S2-b"/>
+          </div>
+          <div class="flex flex-1 flex-col gap-2 p-5 md:p-6">
+            <span class="w-fit rounded-full border border-terracota px-3 py-1 text-xs font-medium text-terracota-oscuro">Extra</span>
+            <h3 class="font-serif text-h3 text-verde">Transporte desde Manizales</h3>
+            <p class="text-small">Te recogemos en Manizales y te llevamos en 4x4 hasta el glamping.</p>
+            <div class="mt-auto flex items-center justify-between gap-4 pt-4">
+              <span class="font-bold text-verde">$90.000 COP <span class="text-small font-normal text-cafe">por trayecto</span></span>
+              <a href="#" class="text-small text-terracota-oscuro underline underline-offset-4 hover:text-terracota">Ver detalle</a>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="mt-8 text-center md:mt-12">
+        <a href="#" class="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-[1.5px] border-verde px-8 text-button font-medium text-verde transition-colors duration-200 hover:bg-verde hover:text-crema sm:w-auto">
+          Ver todos los servicios
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Footer -->
+<footer class="on-dark bg-verde text-crema">
+  <div class="mx-auto w-full max-w-[1200px] px-4 py-12 sm:px-8 md:py-16 lg:px-16">
+    <div class="grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-4">
+      <div class="flex flex-col gap-4">
+        <img src="frontend/public/brand/lauburu-vertical-negativo.svg" alt="Lauburu Glamping" class="w-[140px]"/>
+        <p class="text-small text-crema/85">GLAMPING · MANIZALES</p>
+      </div>
+      <div>
+        <h2 class="text-overline font-medium uppercase text-miel">Navegación</h2>
+        <ul class="mt-4 flex flex-col gap-2 text-small">
+          <li><a href="#" class="hover:underline">Nosotros</a></li>
+          <li><a href="#" class="hover:underline">Servicios</a></li>
+          <li><a href="#" class="hover:underline">Reservar</a></li>
+          <li><a href="#" class="hover:underline">Preguntas frecuentes</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2 class="text-overline font-medium uppercase text-miel">Contacto</h2>
+        <!-- TODO(cliente): WhatsApp, Instagram y correo definitivos -->
+        <ul class="mt-4 flex flex-col gap-2 text-small">
+          <li>Vereda Cuchilla del Salado, Manizales, Caldas</li>
+          <li><a href="#" class="hover:underline">WhatsApp</a></li>
+          <li><a href="#" class="hover:underline">Instagram</a></li>
+          <li><a href="#" class="hover:underline">Correo</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2 class="text-overline font-medium uppercase text-miel">Información legal</h2>
+        <ul class="mt-4 flex flex-col gap-2 text-small">
+          <li><a href="#" class="hover:underline">Términos y condiciones</a></li>
+          <li><a href="#" class="hover:underline">Política de cancelación</a></li>
+          <li><a href="#" class="hover:underline">Tratamiento de datos</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="mt-12 flex flex-col gap-2 border-t border-verde-hoja pt-6 text-small text-crema/85 md:flex-row md:justify-between">
+      <p>© 2026 Lauburu Glamping</p>
+      <!-- TODO(cliente): número de RNT -->
+      <p>RNT 000000</p>
+    </div>
+  </div>
+</footer>
+
+<!-- Botón flotante de WhatsApp -->
+<a href="#" aria-label="Escribir por WhatsApp" class="fixed bottom-4 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-verde text-crema shadow-soft">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+</a>
+
+<script>
+  // Solo para la maqueta: en Next.js esto vive en componentes de cliente.
+  const PRECIO = 85000;
+  const MAXIMO = 4;
+  const cop = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+  const formato = (n) => cop.format(n).replace(/\s/g, "") + " COP";
+  let personas = 2;
+
+  const menos = document.getElementById("menos");
+  const mas = document.getElementById("mas");
+  function pintar() {
+    document.getElementById("personas").textContent = personas === 1 ? "1 persona" : personas + " personas";
+    document.getElementById("detalle-subtotal").textContent = personas + " × " + cop.format(PRECIO).replace(/\s/g, "");
+    document.getElementById("subtotal").textContent = formato(personas * PRECIO);
+    document.getElementById("total").textContent = formato(personas * PRECIO);
+    menos.disabled = personas <= 1;
+    mas.disabled = personas >= MAXIMO;
+  }
+  menos.addEventListener("click", () => { personas = Math.max(1, personas - 1); pintar(); });
+  mas.addEventListener("click", () => { personas = Math.min(MAXIMO, personas + 1); pintar(); });
+  pintar();
+
+  const principal = document.getElementById("foto-principal");
+  document.querySelectorAll("[data-miniatura]").forEach((boton) => {
+    boton.addEventListener("click", () => {
+      const img = boton.querySelector("img");
+      principal.src = img.src;
+      principal.alt = img.alt;
+      document.querySelectorAll("[data-miniatura]").forEach((b) => {
+        const activa = b === boton;
+        b.setAttribute("aria-pressed", String(activa));
+        b.classList.toggle("border-verde", activa);
+        b.classList.toggle("border-transparent", !activa);
+      });
+    });
+  });
+
+  const abrir = document.getElementById("abrir-menu");
+  const menu = document.getElementById("menu-movil");
+  abrir.addEventListener("click", () => {
+    const abierto = abrir.getAttribute("aria-expanded") === "true";
+    abrir.setAttribute("aria-expanded", String(!abierto));
+    abrir.setAttribute("aria-label", abierto ? "Abrir menú" : "Cerrar menú");
+    menu.hidden = abierto;
+  });
+</script>
+</body>
+</html>

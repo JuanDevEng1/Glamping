@@ -1,0 +1,108 @@
+{
+  "id": "4d16ed65-d386-4c7b-82e5-49d630263586",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.configuracion": {
+      "name": "configuracion",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "precio_base": {
+          "name": "precio_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_alto": {
+          "name": "precio_alto",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_persona_extra": {
+          "name": "precio_persona_extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_huespedes": {
+          "name": "max_huespedes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 6
+        },
+        "huespedes_incluidos": {
+          "name": "huespedes_incluidos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "hora_checkin": {
+          "name": "hora_checkin",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'15:00'"
+        },
+        "hora_checkout": {
+          "name": "hora_checkout",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'12:00'"
+        },
+        "minimo_noches_puente": {
+          "name": "minimo_noches_puente",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "version_terminos": {
+          "name": "version_terminos",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "configuracion_fila_unica": {
+          "name": "configuracion_fila_unica",
+          "value": "\"configuracion\".\"id\" = 1"
+        },
+        "configuracion_montos_positivos": {
+          "name": "configuracion_montos_positivos",
+          "value": "\"configuracion\".\"precio_base\" > 0 and \"configuracion\".\"precio_alto\" > 0 and \"configuracion\".\"precio_persona_extra\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

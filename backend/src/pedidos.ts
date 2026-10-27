@@ -1,6 +1,6 @@
 // Catálogo de servicios, disponibilidad y pedidos (Fase 5). Usa la BD; las reglas
 // del carrito están en servicios.ts. El stock se descuenta SOLO al confirmar el pago
-// (webhook, tarea de pasarelas); un pedido pendiente aparta cupos hasta expira_en.
+// (confirmarPedido, desde el webhook); un pedido pendiente aparta cupos hasta expira_en.
 import { and, asc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -195,6 +195,7 @@ export type EstadiaVinculada = {
   codigo: string;
   llegada: string;
   salida: string;
+  /** Total de personas, acompañantes adicionales incluidos. */
   huespedes: number;
   nombre: string;
 };
@@ -295,7 +296,7 @@ export async function vincularReserva(entrada: unknown): Promise<EstadiaVinculad
     codigo: r.codigo,
     llegada: r.fechaLlegada,
     salida: r.fechaSalida,
-    huespedes: r.huespedes,
+    huespedes: r.huespedes + r.adultosAdicionales + r.ninosAdicionales + r.menoresAdicionales,
     nombre: r.nombre.split(" ")[0] ?? r.nombre,
   };
 }
@@ -456,6 +457,70 @@ export async function liberarPedidoPendiente(codigo: string) {
     .update(pedidos)
     .set({ estado: "cancelado" })
     .where(and(eq(pedidos.codigo, codigo), eq(pedidos.estado, "pendiente")));
+}
+
+class SinCupo extends Error {}
+
+/**
+ * Confirma un pedido pagado, dentro de la transacción del webhook: pasa sus cupos a
+ * `reservados` y descuenta las unidades de `servicios.stock`. Cada UPDATE solo aplica si
+ * aún cabe, así que no se sobrevende aunque el apartado del pedido ya hubiera vencido.
+ * Corre en un savepoint: si algo no cabe, no descuenta nada.
+ */
+export async function confirmarPedido(
+  tx: Tx,
+  pedidoId: number,
+): Promise<"confirmado" | "sin_cupo"> {
+  const [pedido] = await tx
+    .select({ estado: pedidos.estado })
+    .from(pedidos)
+    .where(eq(pedidos.id, pedidoId))
+    .for("update");
+  if (pedido?.estado === "confirmado") return "confirmado";
+
+  const items = await tx
+    .select({
+      servicioId: itemsPedido.servicioId,
+      fecha: itemsPedido.fecha,
+      turno: itemsPedido.turno,
+      cantidad: itemsPedido.cantidad,
+      tipoStock: servicios.tipoStock,
+    })
+    .from(itemsPedido)
+    .innerJoin(servicios, eq(servicios.id, itemsPedido.servicioId))
+    .where(eq(itemsPedido.pedidoId, pedidoId));
+
+  try {
+    await tx.transaction(async (sp) => {
+      for (const item of items) {
+        const filas =
+          item.tipoStock === "cupos"
+            ? await sp
+                .update(cuposServicio)
+                .set({ reservados: sql`${cuposServicio.reservados} + ${item.cantidad}` })
+                .where(
+                  and(
+                    eq(cuposServicio.servicioId, item.servicioId),
+                    eq(cuposServicio.fecha, item.fecha ?? ""),
+                    eq(cuposServicio.turno, item.turno ?? ""),
+                    sql`${cuposServicio.reservados} + ${item.cantidad} <= ${cuposServicio.capacidad}`,
+                  ),
+                )
+                .returning({ id: cuposServicio.id })
+            : await sp
+                .update(servicios)
+                .set({ stock: sql`${servicios.stock} - ${item.cantidad}` })
+                .where(and(eq(servicios.id, item.servicioId), gte(servicios.stock, item.cantidad)))
+                .returning({ id: servicios.id });
+        if (filas.length === 0) throw new SinCupo();
+      }
+      await sp.update(pedidos).set({ estado: "confirmado" }).where(eq(pedidos.id, pedidoId));
+    });
+    return "confirmado";
+  } catch (error) {
+    if (error instanceof SinCupo) return "sin_cupo";
+    throw error;
+  }
 }
 
 export type PedidoPublico = {

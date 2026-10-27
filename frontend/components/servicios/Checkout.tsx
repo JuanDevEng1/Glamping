@@ -1,29 +1,27 @@
 "use client";
 
 // Finalizar compra de servicios: datos del comprador → pedido pendiente (aparta cupos)
-// → pasarela. El pago queda deshabilitado hasta integrar Wompi, Bold y PayPal.
+// → PayPal. El webhook confirma el pedido y descuenta el stock.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, ArrowRight, CircleAlert, Clock } from "lucide-react";
 import type { ValidacionCarrito } from "@lauburu/backend/pedidos";
+import type { ClientePaypal } from "@lauburu/backend/paypal";
 import {
+  capturarPagoPedido,
   crearPedidoAccion,
+  iniciarPagoPedido,
   liberarPedidoAccion,
   validarCarritoAccion,
 } from "@/app/servicios/acciones";
 import { Precio, useMoneda } from "@/components/Moneda";
-import {
-  Aviso,
-  Campo,
-  CuentaRegresiva,
-  PASARELAS,
-  claseCampo,
-  type Pasarela,
-} from "@/components/reserva/FlujoReserva";
+import { BotonPaypal, MedioPaypal } from "@/components/pago/BotonPaypal";
+import { Aviso, Campo, CuentaRegresiva, claseCampo } from "@/components/reserva/FlujoReserva";
 import { claseBoton } from "@/components/ui";
 
 import { enlaceWhatsApp } from "@/lib/sitio";
-import { cantidadTexto, cuandoTexto, formatoPrecio, problemaLinea } from "@/lib/formato";
+import { cantidadTexto, cuandoTexto, problemaLinea } from "@/lib/formato";
 import { itemsParaServidor, useCarrito, vinculo } from "./Carrito";
 
 type Datos = {
@@ -35,9 +33,17 @@ type Datos = {
   aceptaMarketing: boolean;
 };
 
-export function Checkout({ minutosHold }: { minutosHold: number }) {
+export function Checkout({
+  minutosHold,
+  paypal,
+}: {
+  minutosHold: number;
+  /** Null si PayPal no está configurado o no hay TRM utilizable. */
+  paypal: ClientePaypal | null;
+}) {
+  const router = useRouter();
   const { items, reserva, vincular, abrir } = useCarrito();
-  const { moneda, trm } = useMoneda();
+  const { trm } = useMoneda();
   const [validacion, setValidacion] = useState<ValidacionCarrito | null>(null);
   const [datos, setDatos] = useState<Datos>({
     nombre: "",
@@ -51,7 +57,6 @@ export function Checkout({ minutosHold }: { minutosHold: number }) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [pedido, setPedido] = useState<{ codigo: string; expiraEn: string } | null>(null);
   const [vencido, setVencido] = useState(false);
-  const [pasarela, setPasarela] = useState<Pasarela>("wompi");
   const [enviando, iniciar] = useTransition();
 
   useEffect(() => {
@@ -117,6 +122,7 @@ export function Checkout({ minutosHold }: { minutosHold: number }) {
   }
 
   async function volver() {
+    setAviso(null);
     if (pedido) await liberarPedidoAccion(pedido.codigo);
     setPedido(null);
   }
@@ -330,57 +336,27 @@ export function Checkout({ minutosHold }: { minutosHold: number }) {
               </p>
             )}
 
-            <fieldset className="mt-6">
-              <legend className="font-serif text-h3 text-verde">¿Cómo quieres pagar?</legend>
-              <div className="mt-4 space-y-3">
-                {PASARELAS.map((p) => (
-                  <label
-                    key={p.id}
-                    className={`flex cursor-pointer items-start gap-3 rounded-card border bg-blanco p-4 transition-colors duration-200 ${
-                      pasarela === p.id
-                        ? "border-verde ring-2 ring-verde/20"
-                        : "border-niebla hover:border-verde"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pasarela"
-                      value={p.id}
-                      checked={pasarela === p.id}
-                      onChange={() => setPasarela(p.id)}
-                      className="mt-1 size-5 shrink-0 accent-verde"
-                    />
-                    <span>
-                      <span className="block font-medium text-verde">{p.nombre}</span>
-                      <span className="block text-small">{p.detalle}</span>
-                      {p.id === "paypal" && trm && validacion && (
-                        <span className="mt-1 block text-small">
-                          Cobro aproximado: {formatoPrecio(validacion.total, "USD", trm.valor)}.
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            {validacion && <MedioPaypal totalCop={validacion.total} trm={trm?.valor ?? null} />}
+            {aviso && <Aviso>{aviso}</Aviso>}
 
-            {/* TODO(tarea pasarelas): integrar Wompi, Bold y PayPal según su documentación oficial. */}
             <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
               <button type="button" onClick={volver} className={claseBoton("secundario")}>
                 <ArrowLeft size={20} strokeWidth={1.5} aria-hidden /> Volver a tus datos
               </button>
-              <button
-                type="button"
-                disabled
-                aria-describedby="pago-pendiente"
-                className={claseBoton("primario")}
-              >
-                Pagar{" "}
-                {validacion ? formatoPrecio(validacion.total, moneda, trm?.valor ?? null) : ""}
-              </button>
+              {paypal && !vencido && (
+                <BotonPaypal
+                  paypal={paypal}
+                  iniciar={() => iniciarPagoPedido(pedido.codigo)}
+                  capturar={capturarPagoPedido}
+                  alAprobar={() => router.push(`/servicios/pedido/${pedido.codigo}`)}
+                  alError={setAviso}
+                />
+              )}
             </div>
-            <p id="pago-pendiente" className="mt-4 max-w-[65ch] text-small">
-              El pago en línea estará disponible muy pronto. Mientras tanto, escríbenos por{" "}
+            <p className="mt-4 max-w-[65ch] text-small">
+              {paypal
+                ? "¿Prefieres pagar en pesos colombianos? Escríbenos por "
+                : "El pago en línea no está disponible en este momento. Escríbenos por "}
               <a
                 href={enlaceWhatsApp(`Hola, quiero pagar mi pedido de servicios ${pedido.codigo}`)}
                 target="_blank"

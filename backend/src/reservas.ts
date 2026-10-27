@@ -1,8 +1,9 @@
 // Reservas: datos de tarifas desde la BD, calendario, cotización y hold (PLAN_DESARROLLO.md §5).
 // Toda entrada se valida con Zod aquí; el precio siempre lo recalcula el servidor con precios.ts.
 import { randomInt } from "node:crypto";
-import { and, eq, gt, gte, lt, lte, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { correoConfigurado, correosAdmin, enviarCorreo } from "./correos";
 import {
   ajustesFecha,
   configuracion,
@@ -18,10 +19,15 @@ import { hoyEnBogota } from "./moneda";
 import {
   calendarioMes,
   cotizar,
+  detalleAdicionales,
   diasEntre,
   esFechaValida,
   esMesValido,
+  SIN_ADICIONALES,
   sumarDias,
+  textoPersonas,
+  totalAdicionales,
+  type Adicionales,
   type Cotizacion,
   type DatosTarifas,
   type DiaCalendario,
@@ -34,10 +40,16 @@ import {
 
 const fecha = z.string().refine(esFechaValida, { error: "Fecha inválida" });
 
+const cantidad = z.coerce.number().int().min(0).max(20).default(0);
+
+// Los límites de negocio (máximo de adicionales, grupo base completo) los aplica cotizar().
 export const esquemaEstadia = z.object({
   llegada: fecha,
   salida: fecha,
   huespedes: z.coerce.number().int().min(1).max(6),
+  adicionales: z
+    .object({ adultos: cantidad, ninos: cantidad, menores: cantidad })
+    .default(SIN_ADICIONALES),
 });
 
 export const TIPOS_DOCUMENTO = {
@@ -45,6 +57,8 @@ export const TIPOS_DOCUMENTO = {
   CE: "Cédula de extranjería",
   PA: "Pasaporte",
 } as const;
+
+export type TipoDocumento = keyof typeof TIPOS_DOCUMENTO;
 
 const opcional = (max: number, error: string) =>
   z
@@ -60,7 +74,9 @@ export const esquemaHuesped = z.object({
     .trim()
     .min(3, { error: "Escribe tu nombre completo" })
     .max(120, { error: "Máximo 120 caracteres" }),
-  tipoDocumento: z.enum(["CC", "CE", "PA"], { error: "Elige el tipo de documento" }),
+  tipoDocumento: z.enum(Object.keys(TIPOS_DOCUMENTO) as [TipoDocumento, ...TipoDocumento[]], {
+    error: "Elige el tipo de documento",
+  }),
   documento: z
     .string()
     .trim()
@@ -220,7 +236,7 @@ export async function crearReservaPendiente(entrada: {
   }
   if (!process.env.DATABASE_URL) return { ok: false, error: "sin_configuracion" };
 
-  const { llegada, salida, huespedes } = estadia.data;
+  const { llegada, salida, huespedes, adicionales } = estadia.data;
   const { aceptaTerminos: _, ...datosHuesped } = huesped.data;
   if (salida <= llegada) return { ok: false, error: "fechas_invalidas" };
 
@@ -244,6 +260,9 @@ export async function crearReservaPendiente(entrada: {
           fechaLlegada: llegada,
           fechaSalida: salida,
           huespedes,
+          adultosAdicionales: adicionales.adultos,
+          ninosAdicionales: adicionales.ninos,
+          menoresAdicionales: adicionales.menores,
           estado: "pendiente",
           totalCop: cotizacion.total,
           desglose: cotizacion.noches,
@@ -275,6 +294,41 @@ export async function liberarReservaPendiente(codigo: string) {
     .where(and(eq(reservas.codigo, codigo), eq(reservas.estado, "pendiente")));
 }
 
+/**
+ * Confirma una reserva pagada, dentro de la transacción del webhook. Si su hold ya venció o
+ * se canceló, intenta confirmarla igual: reservas_sin_cruce lo impide si otra reserva tomó
+ * esas noches. Corre en un savepoint para que ese error no aborte la transacción `tx`.
+ */
+export async function confirmarReserva(
+  tx: Tx,
+  reservaId: number,
+  pasarela: string,
+): Promise<"confirmada" | "no_disponible"> {
+  try {
+    await tx.transaction(async (sp) => {
+      // Un hold vencido que siga "pendiente" también cuenta para la restricción.
+      await sp
+        .update(reservas)
+        .set({ estado: "expirada" })
+        .where(
+          and(
+            eq(reservas.estado, "pendiente"),
+            lt(reservas.expiraEn, sql`now()`),
+            ne(reservas.id, reservaId),
+          ),
+        );
+      await sp
+        .update(reservas)
+        .set({ estado: "confirmada", pasarela })
+        .where(eq(reservas.id, reservaId));
+    });
+    return "confirmada";
+  } catch (error) {
+    if (esViolacionSinCruce(error)) return "no_disponible";
+    throw error;
+  }
+}
+
 export function enmascararCorreo(correo: string) {
   const [usuario = "", dominio = ""] = correo.split("@");
   return `${usuario.slice(0, 1)}***@${dominio}`;
@@ -288,9 +342,23 @@ export type ReservaPublica = {
   fechaLlegada: string;
   fechaSalida: string;
   huespedes: number;
+  adicionales: Adicionales;
   totalCop: number;
   expiraEn: string;
+  documentoRecibido: boolean;
 };
+
+function adicionalesDe(r: {
+  adultosAdicionales: number;
+  ninosAdicionales: number;
+  menoresAdicionales: number;
+}): Adicionales {
+  return {
+    adultos: r.adultosAdicionales,
+    ninos: r.ninosAdicionales,
+    menores: r.menoresAdicionales,
+  };
+}
 
 /** Datos mínimos para la página de confirmación (sin documento ni teléfono). */
 export async function obtenerReservaPublica(codigo: string): Promise<ReservaPublica | null> {
@@ -304,8 +372,12 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
       fechaLlegada: reservas.fechaLlegada,
       fechaSalida: reservas.fechaSalida,
       huespedes: reservas.huespedes,
+      adultosAdicionales: reservas.adultosAdicionales,
+      ninosAdicionales: reservas.ninosAdicionales,
+      menoresAdicionales: reservas.menoresAdicionales,
       totalCop: reservas.totalCop,
       expiraEn: reservas.expiraEn,
+      documentoRecibidoEn: reservas.documentoRecibidoEn,
     })
     .from(reservas)
     .where(eq(reservas.codigo, codigo))
@@ -314,11 +386,134 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
   // Un hold vencido se muestra como expirado aunque aún no se haya marcado en la BD.
   const estado =
     r.estado === "pendiente" && r.expiraEn.getTime() < Date.now() ? "expirada" : r.estado;
+  const {
+    documentoRecibidoEn,
+    adultosAdicionales: _a,
+    ninosAdicionales: _n,
+    menoresAdicionales: _m,
+    ...resto
+  } = r;
   return {
-    ...r,
+    ...resto,
+    adicionales: adicionalesDe(r),
     estado,
     nombre: r.nombre.split(" ")[0] ?? r.nombre,
     correo: enmascararCorreo(r.correo),
     expiraEn: r.expiraEn.toISOString(),
+    documentoRecibido: documentoRecibidoEn !== null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Documento de identidad del titular (después de pagar)
+// ---------------------------------------------------------------------------
+
+/** 4 MB: con el resto del formulario queda bajo el límite de 5 MB de las server actions. */
+export const MAX_BYTES_DOCUMENTO = 4 * 1024 * 1024;
+
+const FIRMAS_ARCHIVO = [
+  { extension: "jpg", bytes: [0xff, 0xd8, 0xff] },
+  { extension: "png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+  { extension: "pdf", bytes: [0x25, 0x50, 0x44, 0x46, 0x2d] }, // "%PDF-"
+] as const;
+
+/** Extensión según los primeros bytes, no según el nombre ni el tipo que declara el navegador. */
+export function extensionDocumento(bytes: Uint8Array) {
+  return FIRMAS_ARCHIVO.find((f) => f.bytes.every((b, i) => bytes[i] === b))?.extension ?? null;
+}
+
+export type ResultadoDocumento =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "datos_invalidos"
+        | "archivo_invalido"
+        | "archivo_grande"
+        | "no_disponible"
+        | "ya_recibido"
+        | "error_correo"
+        | "sin_configuracion";
+    };
+
+const fechaLarga = (fecha: string) =>
+  new Intl.DateTimeFormat("es-CO", { dateStyle: "long", timeZone: "UTC" }).format(
+    new Date(`${fecha}T00:00:00Z`),
+  );
+
+/** "15:00:00" → "3:00 p. m." (igual que formatoHora del frontend). */
+const horaCorta = (hora: string) =>
+  new Intl.DateTimeFormat("es-CO", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(
+    new Date(`2000-01-01T${hora.slice(0, 5)}:00Z`),
+  );
+
+/**
+ * Envía al admin, como adjunto, el documento que sube el titular de una reserva confirmada.
+ * El archivo no se guarda: solo se marca `documentoRecibidoEn`. Se acepta uno por reserva.
+ */
+export async function recibirDocumentoReserva(
+  codigo: unknown,
+  archivo: unknown,
+): Promise<ResultadoDocumento> {
+  if (typeof codigo !== "string" || !/^LAU-[A-Z0-9]{8}$/.test(codigo) || !(archivo instanceof Blob))
+    return { ok: false, error: "datos_invalidos" };
+  const admin = correosAdmin();
+  if (!process.env.DATABASE_URL || !correoConfigurado() || admin.length === 0)
+    return { ok: false, error: "sin_configuracion" };
+  if (archivo.size > MAX_BYTES_DOCUMENTO) return { ok: false, error: "archivo_grande" };
+  const bytes = new Uint8Array(await archivo.arrayBuffer());
+  const extension = extensionDocumento(bytes);
+  if (!extension) return { ok: false, error: "archivo_invalido" };
+
+  const db = getDb();
+  const [r] = await db.select().from(reservas).where(eq(reservas.codigo, codigo)).limit(1);
+  if (!r || r.estado !== "confirmada") return { ok: false, error: "no_disponible" };
+  if (r.documentoRecibidoEn) return { ok: false, error: "ya_recibido" };
+
+  const [config] = await db
+    .select({ horaCheckin: configuracion.horaCheckin, horaCheckout: configuracion.horaCheckout })
+    .from(configuracion)
+    .limit(1);
+  const noches = diasEntre(r.fechaLlegada, r.fechaSalida);
+  const tipo = TIPOS_DOCUMENTO[r.tipoDocumento as TipoDocumento] ?? r.tipoDocumento;
+  const adicionales = adicionalesDe(r);
+  const desde = config ? `, desde las ${horaCorta(config.horaCheckin)}` : "";
+  const hasta = config ? `, hasta las ${horaCorta(config.horaCheckout)}` : "";
+  try {
+    await enviarCorreo({
+      para: admin,
+      asunto: `Documento de la reserva ${r.codigo}`,
+      texto: [
+        `El titular de la reserva ${r.codigo} envió su documento de identidad. Va adjunto.`,
+        "",
+        `Titular: ${r.nombre}`,
+        `Documento registrado: ${tipo} ${r.documento}`,
+        `Llegada (check-in): ${fechaLarga(r.fechaLlegada)}${desde}`,
+        `Salida (check-out): ${fechaLarga(r.fechaSalida)}${hasta} (${noches} ${noches === 1 ? "noche" : "noches"})`,
+        `Huéspedes: ${textoPersonas(r.huespedes, adicionales)}`,
+        ...(totalAdicionales(adicionales) > 0
+          ? [`Adicionales: ${detalleAdicionales(adicionales).join(", ")}`]
+          : []),
+        `Correo: ${r.correo}`,
+        `Celular: ${r.telefono}`,
+        "",
+        "Al hacer el check-in, compara este documento con el original para confirmar que es la misma persona que reservó.",
+        "",
+        "Este correo tiene datos personales: no lo reenvíes y bórralo cuando ya no lo necesites.",
+      ].join("\n"),
+      adjuntos: [{ nombre: `${r.codigo}-documento.${extension}`, contenido: bytes }],
+    });
+  } catch (error) {
+    console.error(
+      `No se pudo enviar el documento de la reserva ${r.codigo}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return { ok: false, error: "error_correo" };
+  }
+
+  await db
+    .update(reservas)
+    .set({ documentoRecibidoEn: sql`now()` })
+    .where(and(eq(reservas.id, r.id), isNull(reservas.documentoRecibidoEn)));
+  return { ok: true };
 }

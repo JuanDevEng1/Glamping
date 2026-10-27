@@ -9,6 +9,7 @@ import {
   validarCarrito,
   vincularReserva,
 } from "@lauburu/backend/pedidos";
+import { capturarPagoPaypal, iniciarPagoPaypal } from "@lauburu/backend/pagos";
 
 type Item = { servicioId: number; fecha: string | null; turno: string | null; cantidad: number };
 type Vinculo = { codigo: string; correo: string } | null;
@@ -42,4 +43,12 @@ export async function crearPedidoAccion(
 
 export async function liberarPedidoAccion(codigo: string) {
   await liberarPedidoPendiente(String(codigo));
+}
+
+export async function iniciarPagoPedido(codigo: string) {
+  return iniciarPagoPaypal({ tipo: "pedido", codigo });
+}
+
+export async function capturarPagoPedido(idOrden: string) {
+  return capturarPagoPaypal(idOrden);
 }

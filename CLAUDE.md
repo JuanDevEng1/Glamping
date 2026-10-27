@@ -34,12 +34,12 @@ Next.js 15 (App Router) · TypeScript estricto · Tailwind v4 · PostgreSQL + Dr
 - Webhooks: verificar firma (401 si falla), idempotencia por `id_evento`, comparar monto y moneda, confirmar en transacción, enviar correos después del commit.
 - Stock de servicios: se descuenta al confirmar el pago, dentro de una transacción.
 - Fechas como `DATE` en zona `America/Bogota`. Una noche = fecha de llegada inclusiva, salida exclusiva.
-- Montos en COP como enteros (centavos cuando la pasarela lo pida). PayPal cobra en USD con la TRM guardada en la reserva.
+- Montos en COP como enteros (centavos cuando la pasarela lo pida). PayPal cobra en USD con la TRM guardada en la fila de `pagos` de esa reserva o pedido.
 
 ## Seguridad
 - Secretos solo en variables de entorno. Nunca en el código, en logs ni en componentes de cliente (`NEXT_PUBLIC_` solo para llaves públicas).
 - Valida toda entrada con Zod en el servidor.
-- El panel `/panel` requiere sesión y correo en la lista permitida; protégelo en el servidor, no solo en la UI.
+- No hay panel de administración (`/panel`): el admin recibe lo que necesita por correo (`CORREO_ADMIN`), por ejemplo el documento de identidad que sube el titular después de pagar. Ese archivo no se guarda en el servidor.
 - No registres datos personales completos ni datos de tarjetas en logs.
 
 ## UI

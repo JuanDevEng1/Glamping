@@ -4,9 +4,13 @@ import { notFound } from "next/navigation";
 import { CircleCheck, Clock, Home, Info, MapPin, PlusCircle } from "lucide-react";
 import { obtenerConfiguracion } from "@lauburu/backend/db";
 import { obtenerReservaPublica } from "@lauburu/backend/reservas";
-import { diasEntre } from "@lauburu/backend/precios";
+import { detalleAdicionales, diasEntre, textoPersonas } from "@lauburu/backend/precios";
 import { Container } from "@/components/Container";
-import { CopiarCodigo, RefrescoAutomatico } from "@/components/reserva/Confirmacion";
+import {
+  CopiarCodigo,
+  RefrescoAutomatico,
+  SubirDocumento,
+} from "@/components/reserva/Confirmacion";
 import { PasosReserva } from "@/components/reserva/FlujoReserva";
 import { FotoPendiente, Tarjeta, claseBoton } from "@/components/ui";
 import { formatoFecha, formatoHora, formatoPrecio } from "@/lib/formato";
@@ -99,6 +103,10 @@ export default async function ConfirmacionReserva({
               <CopiarCodigo codigo={reserva.codigo} />
             </Tarjeta>
 
+            {confirmada && (
+              <SubirDocumento codigo={reserva.codigo} recibido={reserva.documentoRecibido} />
+            )}
+
             {/* Resumen */}
             <Tarjeta>
               <h2 className="font-serif text-h3 text-verde">Resumen de la reserva</h2>
@@ -118,15 +126,18 @@ export default async function ConfirmacionReserva({
                   {config && (
                     <div>
                       <dt className="font-medium text-verde">Horarios</dt>
-                      <dd>Llegada desde las {formatoHora(config.horaCheckin)}</dd>
-                      <dd>Salida hasta las {formatoHora(config.horaCheckout)}</dd>
+                      <dd>Entrada (check-in) desde las {formatoHora(config.horaCheckin)}</dd>
+                      <dd>Salida (check-out) hasta las {formatoHora(config.horaCheckout)}</dd>
                     </div>
                   )}
                   <div>
                     <dt className="font-medium text-verde">Huéspedes</dt>
-                    <dd>
-                      {reserva.huespedes} {reserva.huespedes === 1 ? "persona" : "personas"}
-                    </dd>
+                    <dd>{textoPersonas(reserva.huespedes, reserva.adicionales)}</dd>
+                    {detalleAdicionales(reserva.adicionales).length > 0 && (
+                      <dd className="text-xs">
+                        Adicionales: {detalleAdicionales(reserva.adicionales).join(", ")}
+                      </dd>
+                    )}
                   </div>
                   <div>
                     <dt className="font-medium text-verde">

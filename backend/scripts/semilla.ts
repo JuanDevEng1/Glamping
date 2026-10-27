@@ -1,7 +1,9 @@
-// Carga los festivos de Colombia 2026–2028 (sin sobrescribir los editados en el panel).
-// Con --ejemplo también crea configuración, temporadas y servicios DE PRUEBA para desarrollo local.
+// Carga los festivos, las temporadas altas y las fechas especiales de Colombia 2026–2028 sin
+// sobrescribir lo que ya exista. Con --ejemplo también crea configuración y servicios DE PRUEBA.
 // Uso: npm run db:seed            ·  npm run db:seed:ejemplo
+import { like } from "drizzle-orm";
 import {
+  ajustesFecha,
   aliados,
   configuracion,
   cuposServicio,
@@ -11,7 +13,12 @@ import {
   temporadas,
 } from "../src/db";
 import { hoyEnBogota } from "../src/moneda";
-import { calcularFestivos, sumarDias } from "../src/precios";
+import {
+  calcularFechasEspeciales,
+  calcularFestivos,
+  calcularTemporadasAltas,
+  sumarDias,
+} from "../src/precios";
 
 try {
   process.loadEnvFile("../frontend/.env.local");
@@ -21,39 +28,39 @@ try {
 
 const db = getDb();
 
-const filas = [2026, 2027, 2028].flatMap(calcularFestivos);
+const ANIOS = [2026, 2027, 2028];
+
+const filas = ANIOS.flatMap(calcularFestivos);
 await db.insert(festivos).values(filas).onConflictDoNothing();
 console.log(`Festivos: ${filas.length} revisados (los existentes no se modifican).`);
 
+// Las temporadas de ejemplo de versiones anteriores se cruzan con las reales.
+await db.delete(temporadas).where(like(temporadas.nombre, "%(ejemplo)"));
+const nombresTemporadas = new Set(
+  (await db.select({ nombre: temporadas.nombre }).from(temporadas)).map((t) => t.nombre),
+);
+const nuevasTemporadas = ANIOS.flatMap(calcularTemporadasAltas).filter(
+  (t) => !nombresTemporadas.has(t.nombre),
+);
+if (nuevasTemporadas.length > 0) await db.insert(temporadas).values(nuevasTemporadas);
+console.log(`Temporadas altas: ${nuevasTemporadas.length} nuevas.`);
+
+// Una fecha con ajuste propio (precio o bloqueo) no se modifica.
+const especiales = ANIOS.flatMap(calcularFechasEspeciales);
+await db
+  .insert(ajustesFecha)
+  .values(especiales.map((e) => ({ fecha: e.fecha, especial: true, motivo: e.nombre })))
+  .onConflictDoNothing();
+console.log(`Fechas especiales: ${especiales.length} revisadas (las existentes no se modifican).`);
+
 if (process.argv.includes("--ejemplo")) {
   // Tarifas del glamping; temporada alta, fecha especial y adicionales usan los valores por
-  // defecto de la tabla (560 000, 650 000, 90 000 y 60 000). Las temporadas son de ejemplo.
+  // defecto de la tabla (560 000, 650 000, 90 000 y 60 000).
   await db
     .insert(configuracion)
     .values({ precioBase: 420_000, precioAlto: 490_000, precioPersonaExtra: 60_000 })
     .onConflictDoNothing();
-  const existentes = await db.select({ id: temporadas.id }).from(temporadas).limit(1);
-  if (existentes.length === 0) {
-    await db.insert(temporadas).values([
-      {
-        nombre: "Fin de año (ejemplo)",
-        fechaInicio: "2026-12-15",
-        fechaFin: "2027-01-15",
-        precioNoche: null,
-        precioPersonaExtra: 80_000,
-        minimoNoches: 2,
-      },
-      {
-        nombre: "Semana Santa (ejemplo)",
-        fechaInicio: "2027-03-20",
-        fechaFin: "2027-03-28",
-        precioNoche: null,
-        precioPersonaExtra: null,
-        minimoNoches: 2,
-      },
-    ]);
-  }
-  console.log("Configuración y temporadas de ejemplo listas.");
+  console.log("Configuración lista.");
 
   if ((await db.select({ id: servicios.id }).from(servicios).limit(1)).length === 0) {
     await sembrarServicios();

@@ -8,6 +8,7 @@ const url = process.env.DATABASE_URL_PRUEBAS;
 describe.skipIf(!url)("pedidos en BD de pruebas", () => {
   let aliadoId = 0;
   let servicioId = 0;
+  const codigosReserva: string[] = [];
 
   beforeAll(async () => {
     process.env.DATABASE_URL = url;
@@ -36,15 +37,18 @@ describe.skipIf(!url)("pedidos en BD de pruebas", () => {
       })
       .returning();
     servicioId = servicio!.id;
-    await db
-      .insert(cuposServicio)
-      .values({ servicioId, fecha: sumarDias(hoyEnBogota(), 10), turno: "", capacidad: 1 });
+    await db.insert(cuposServicio).values([
+      { servicioId, fecha: sumarDias(hoyEnBogota(), 10), turno: "", capacidad: 1 },
+      { servicioId, fecha: sumarDias(hoyEnBogota(), 11), turno: "", capacidad: 1 },
+    ]);
   });
 
   afterAll(async () => {
-    const { aliados, cuposServicio, getDb, itemsPedido, pedidos, servicios } =
+    const { aliados, cuposServicio, getDb, itemsPedido, pedidos, reservas, servicios } =
       await import("../src/db");
     const db = getDb();
+    if (codigosReserva.length)
+      await db.delete(reservas).where(inArray(reservas.codigo, codigosReserva));
     const ids = (
       await db
         .select({ id: itemsPedido.pedidoId })
@@ -79,5 +83,107 @@ describe.skipIf(!url)("pedidos en BD de pruebas", () => {
     ]);
     expect(resultados.filter((r) => r.ok)).toHaveLength(1);
     expect(resultados.find((r) => !r.ok)).toMatchObject({ ok: false, error: "carrito_invalido" });
+  });
+
+  const comprador = {
+    nombre: "Prueba Pedido",
+    correo: "prueba@example.com",
+    telefono: "3000000000",
+    aceptaTerminos: true,
+  };
+
+  it("vincular reserva: código y correo sin importar mayúsculas; nunca con otro correo o sin pagar", async () => {
+    const { configuracion, getDb, reservas } = await import("../src/db");
+    const { crearReservaPendiente } = await import("../src/reservas");
+    const { vincularReserva } = await import("../src/pedidos");
+    const { hoyEnBogota } = await import("../src/moneda");
+    const { sumarDias } = await import("../src/precios");
+
+    await getDb()
+      .insert(configuracion)
+      .values({ precioBase: 280_000, precioAlto: 350_000, precioPersonaExtra: 60_000 })
+      .onConflictDoNothing();
+    const llegada = sumarDias(hoyEnBogota(), 700);
+    const r = await crearReservaPendiente({
+      estadia: { llegada, salida: sumarDias(llegada, 2), huespedes: 3 },
+      huesped: {
+        nombre: "Ana Vinculo",
+        tipoDocumento: "CC",
+        documento: "123456",
+        correo: "Ana.Vinculo@Example.com",
+        telefono: "3000000000",
+        pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
+        aceptaTerminos: true,
+      },
+    });
+    if (!r.ok) throw new Error(`No se creó la reserva: ${r.error}`);
+    codigosReserva.push(r.codigo);
+
+    // Pendiente de pago: no se vincula.
+    expect(
+      await vincularReserva({ codigo: r.codigo, correo: "ana.vinculo@example.com" }),
+    ).toBeNull();
+
+    await getDb()
+      .update(reservas)
+      .set({ estado: "confirmada" })
+      .where(eq(reservas.codigo, r.codigo));
+    expect(
+      await vincularReserva({
+        codigo: r.codigo.toLowerCase(),
+        correo: " ANA.VINCULO@example.com ",
+      }),
+    ).toEqual({
+      codigo: r.codigo,
+      llegada,
+      salida: sumarDias(llegada, 2),
+      huespedes: 3,
+      nombre: "Ana",
+    });
+    expect(await vincularReserva({ codigo: r.codigo, correo: "otra@example.com" })).toBeNull();
+    expect(
+      await vincularReserva({ codigo: "LAU-NOEXISTE", correo: "ana.vinculo@example.com" }),
+    ).toBeNull();
+    expect(await vincularReserva({ codigo: "cualquier cosa", correo: "no es correo" })).toBeNull();
+  });
+
+  it("liberar un pedido devuelve el cupo; un apartado vencido también y queda expirado", async () => {
+    const { getDb, pedidos } = await import("../src/db");
+    const { crearPedidoPendiente, liberarPedidoPendiente } = await import("../src/pedidos");
+    const { hoyEnBogota } = await import("../src/moneda");
+    const { sumarDias } = await import("../src/precios");
+    const { sql } = await import("drizzle-orm");
+    const entrada = {
+      items: [{ servicioId, fecha: sumarDias(hoyEnBogota(), 11), turno: null, cantidad: 1 }],
+      comprador,
+    };
+
+    const primero = await crearPedidoPendiente(entrada);
+    if (!primero.ok) throw new Error(`No se creó el pedido: ${primero.error}`);
+    expect(await crearPedidoPendiente(entrada)).toMatchObject({
+      ok: false,
+      error: "carrito_invalido",
+    });
+
+    await liberarPedidoPendiente(primero.codigo);
+    const segundo = await crearPedidoPendiente(entrada);
+    if (!segundo.ok) throw new Error(`No se liberó el cupo: ${segundo.error}`);
+
+    await getDb()
+      .update(pedidos)
+      .set({ expiraEn: sql`now() - interval '1 minute'` })
+      .where(eq(pedidos.codigo, segundo.codigo));
+    expect(await crearPedidoPendiente(entrada)).toMatchObject({ ok: true });
+
+    const estados = await getDb()
+      .select({ codigo: pedidos.codigo, estado: pedidos.estado })
+      .from(pedidos)
+      .where(inArray(pedidos.codigo, [primero.codigo, segundo.codigo]));
+    expect(Object.fromEntries(estados.map((p) => [p.codigo, p.estado]))).toEqual({
+      [primero.codigo]: "cancelado",
+      [segundo.codigo]: "expirado",
+    });
   });
 });

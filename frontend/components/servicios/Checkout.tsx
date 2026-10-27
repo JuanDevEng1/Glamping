@@ -110,6 +110,8 @@ export function Checkout({
       } else if (r.error === "carrito_invalido") {
         if (r.carrito) setValidacion({ ...r.carrito, reserva: validacion?.reserva ?? null });
         setAviso("Algunos servicios cambiaron mientras comprabas. Revisa el carrito.");
+      } else if (r.error === "demasiadas_peticiones") {
+        setAviso("Hiciste muchos intentos seguidos. Espera un momento y vuelve a intentarlo.");
       } else if (r.error === "reserva_invalida") {
         vincular(null);
         setAviso(

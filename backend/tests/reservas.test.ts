@@ -59,6 +59,8 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
         correo: "prueba@example.com",
         telefono: "3000000000",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     };
@@ -96,6 +98,8 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
         correo: "prueba@example.com",
         telefono: "3000000000",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     });
@@ -149,5 +153,159 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
       vi.unstubAllEnvs();
       vi.unstubAllGlobals();
     }
+  });
+
+  async function crear(diasDesdeHoy: number, cambios: Record<string, unknown> = {}) {
+    const { crearReservaPendiente } = await import("../src/reservas");
+    const { hoyEnBogota } = await import("../src/moneda");
+    const { sumarDias } = await import("../src/precios");
+    const llegada = sumarDias(hoyEnBogota(), diasDesdeHoy);
+    const r = await crearReservaPendiente({
+      estadia: { llegada, salida: sumarDias(llegada, 2), huespedes: 2, ...cambios },
+      huesped: {
+        nombre: "Prueba Reservas",
+        tipoDocumento: "CC",
+        documento: "123456",
+        correo: "reservas@example.com",
+        telefono: "3000000000",
+        pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
+        alergias: "Maní",
+        aceptaTerminos: true,
+      },
+    });
+    if (r.ok) codigos.push(r.codigo);
+    return r;
+  }
+
+  it("guarda mascotas, alergias y contacto de emergencia; sin contacto no crea la reserva", async () => {
+    const { crearReservaPendiente } = await import("../src/reservas");
+    const { getDb, reservas } = await import("../src/db");
+
+    const r = await crear(540, { mascotas: 2 });
+    if (!r.ok) throw new Error(`No se creó la reserva: ${r.error}`);
+    expect(r.cotizacion.extraMascotas).toBe(2 * 2 * r.cotizacion.precioMascota);
+    const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, r.codigo));
+    expect(fila).toMatchObject({
+      mascotas: 2,
+      alergias: "Maní",
+      contactoEmergencia: "Contacto Prueba",
+      telefonoEmergencia: "3110000000",
+      totalCop: r.cotizacion.total,
+    });
+
+    const sinContacto = await crearReservaPendiente({
+      estadia: { llegada: "2030-01-10", salida: "2030-01-12", huespedes: 2 },
+      huesped: {
+        nombre: "Prueba Reservas",
+        tipoDocumento: "CC",
+        documento: "123456",
+        correo: "reservas@example.com",
+        telefono: "3000000000",
+        pais: "Colombia",
+        aceptaTerminos: true,
+      },
+    });
+    expect(sinContacto).toMatchObject({ ok: false, error: "datos_invalidos" });
+    if (!sinContacto.ok && sinContacto.error === "datos_invalidos") {
+      expect(Object.keys(sinContacto.errores)).toEqual(
+        expect.arrayContaining(["contactoEmergencia", "telefonoEmergencia"]),
+      );
+    }
+  });
+
+  it("liberar cancela la reserva pendiente y no toca una confirmada", async () => {
+    const { getDb, reservas } = await import("../src/db");
+    const { liberarReservaPendiente } = await import("../src/reservas");
+    const estado = async (codigo: string) =>
+      (await getDb().select().from(reservas).where(eq(reservas.codigo, codigo)))[0]?.estado;
+
+    const pendiente = await crear(560);
+    const confirmada = await crear(570);
+    if (!pendiente.ok || !confirmada.ok) throw new Error("No se crearon las reservas");
+    await getDb()
+      .update(reservas)
+      .set({ estado: "confirmada" })
+      .where(eq(reservas.codigo, confirmada.codigo));
+
+    await liberarReservaPendiente(pendiente.codigo);
+    await liberarReservaPendiente(confirmada.codigo);
+    expect(await estado(pendiente.codigo)).toBe("cancelada");
+    expect(await estado(confirmada.codigo)).toBe("confirmada");
+
+    // Las fechas liberadas se pueden volver a reservar.
+    expect(await crear(560)).toMatchObject({ ok: true });
+  });
+
+  it("un apartado vencido libera las fechas y queda expirado", async () => {
+    const { getDb, reservas } = await import("../src/db");
+    const { sql } = await import("drizzle-orm");
+
+    const primera = await crear(580);
+    if (!primera.ok) throw new Error("No se creó la reserva");
+    expect(await crear(580)).toMatchObject({ ok: false, error: "no_disponible" });
+
+    await getDb()
+      .update(reservas)
+      .set({ expiraEn: sql`now() - interval '1 minute'` })
+      .where(eq(reservas.codigo, primera.codigo));
+
+    expect(await crear(580)).toMatchObject({ ok: true });
+    const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, primera.codigo));
+    expect(fila?.estado).toBe("expirada");
+  });
+
+  it("un error de BD llega al log sin datos personales", async () => {
+    const { errorSinDatos, getDb, reservas } = await import("../src/db");
+    let original: unknown;
+    try {
+      // huespedes = 99 viola reservas_huespedes.
+      await getDb().insert(reservas).values({
+        codigo: "LAU-ERRORPRB",
+        fechaLlegada: "2030-02-01",
+        fechaSalida: "2030-02-02",
+        huespedes: 99,
+        totalCop: 1,
+        desglose: [],
+        nombre: "Dato Secreto",
+        correo: "secreto@example.com",
+        telefono: "3000000000",
+        tipoDocumento: "CC",
+        documento: "999999",
+        pais: "Colombia",
+        expiraEn: new Date(),
+        terminosVersion: "1",
+      });
+    } catch (error) {
+      original = error;
+    }
+    // El error de Drizzle sí trae los parámetros: por eso no se registra tal cual.
+    expect(String((original as Error).message)).toContain("secreto@example.com");
+    const limpio = errorSinDatos("No se pudo crear la reserva", original).message;
+    expect(limpio).toContain("23514");
+    expect(limpio).not.toMatch(/Dato Secreto|secreto@example\.com|999999/);
+  });
+
+  it("límite de peticiones: bloquea al pasar el máximo y se reinicia con la ventana", async () => {
+    const { getDb, limitesPeticiones, permitirPeticion } = await import("../src/db");
+    const { sql } = await import("drizzle-orm");
+    const clave = `prueba:${Date.now()}`;
+
+    expect(await permitirPeticion(clave, 2, 60)).toBe(true);
+    expect(await permitirPeticion(clave, 2, 60)).toBe(true);
+    expect(await permitirPeticion(clave, 2, 60)).toBe(false);
+    // Simultáneas: ninguna se salta el conteo.
+    const varias = await Promise.all(
+      Array.from({ length: 5 }, () => permitirPeticion(`${clave}:b`, 3, 60)),
+    );
+    expect(varias.filter(Boolean)).toHaveLength(3);
+
+    // Ventana vencida: vuelve a permitir.
+    await getDb()
+      .update(limitesPeticiones)
+      .set({ inicio: sql`now() - interval '2 minutes'` });
+    expect(await permitirPeticion(clave, 2, 60)).toBe(true);
+    await getDb().delete(limitesPeticiones);
   });
 });

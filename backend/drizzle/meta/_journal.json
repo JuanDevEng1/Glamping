@@ -50,6 +50,20 @@
       "when": 1793071616735,
       "tag": "0006_sleepy_prima",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793132888014,
+      "tag": "0007_charming_revanche",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793134777041,
+      "tag": "0008_living_mongoose",
+      "breakpoints": true
     }
   ]
 }

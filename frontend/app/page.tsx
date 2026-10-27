@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 // TODO(cliente): confirmar la lista completa de lo que incluye la estadía.
 const incluidos = [
   "Jacuzzi privado",
-  "Malla catamarán para descansar al aire libre",
+  "Malla catamarán para descansar al aire libre (hasta 180 kg)",
   "Ventanal con vista a las montañas",
 ];
 
@@ -99,11 +99,27 @@ export default async function Nosotros() {
         <p>Te confirmamos los horarios de llegada y salida al hacer tu reserva.</p>
       ),
     },
-    // TODO(cliente): responder parqueadero y alimentos.
-    { pregunta: "¿Hay parqueadero?", respuesta: respuestaPorWhatsApp },
+    {
+      pregunta: "¿Hay parqueadero?",
+      respuesta: <p>Sí, hay espacio para 3 carros o 6 motos.</p>,
+    },
     {
       pregunta: "¿Puedo llevar a mi mascota?",
-      respuesta: <p>No, en Lauburu no se admiten mascotas.</p>,
+      respuesta: config ? (
+        <p>
+          Sí, tu mascota es bienvenida. Tiene un valor adicional de{" "}
+          <Precio cop={config.precioMascota} trm={trmValor} /> por noche por cada mascota; lo
+          agregas al elegir los huéspedes.
+        </p>
+      ) : (
+        <p>Sí, tu mascota es bienvenida, con un valor adicional por noche.</p>
+      ),
+    },
+    {
+      pregunta: "¿Cuánto peso resiste la malla catamarán?",
+      respuesta: (
+        <p>Hasta 180 kg en total al mismo tiempo. Así la disfrutan todos con seguridad.</p>
+      ),
     },
     {
       pregunta: "¿Qué clima hace y qué ropa debo llevar?",
@@ -115,6 +131,7 @@ export default async function Nosotros() {
         </p>
       ),
     },
+    // TODO(cliente): responder alimentos.
     { pregunta: "¿Puedo llevar mi propia comida y bebidas?", respuesta: respuestaPorWhatsApp },
   ];
 
@@ -334,8 +351,8 @@ export default async function Nosotros() {
               <p className="text-overline font-medium text-terracota-oscuro">NOCHES PUNTUALES</p>
               <h3 className="mt-2 font-serif text-h3 text-verde">Fecha especial</h3>
               <p className="mt-2 text-small">
-                Noches de alta demanda, como celebraciones y fiestas de la región. Las verás
-                marcadas en el calendario.
+                Nochebuena, 31 de diciembre, Día de la Madre, Día del Padre, Amor y Amistad y otras
+                noches de celebración. Las verás marcadas en el calendario.
               </p>
             </div>
             {config && (

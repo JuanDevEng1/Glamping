@@ -5,7 +5,7 @@
 // transacción; los correos van después del commit.
 import { and, eq, gt, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { eventosPasarela, getDb, pagos, pedidos, reservas, type Tx } from "./db";
+import { errorSinDatos, eventosPasarela, getDb, pagos, pedidos, reservas, type Tx } from "./db";
 import { centavosAValor, copAUsdCentavos, trmParaCobro, valorACentavos } from "./moneda";
 import {
   capturarOrden,
@@ -55,7 +55,7 @@ async function cargarPendiente(destino: Destino) {
 export type ResultadoIniciar =
   | { ok: true; idOrden: string }
   | { ok: false; error: "datos_invalidos" | "no_disponible" | "sin_trm" | "sin_configuracion" }
-  | { ok: false; error: "error_pasarela" };
+  | { ok: false; error: "error_pasarela" | "demasiadas_peticiones" };
 
 /** Crea la orden de PayPal por el total guardado en la BD, convertido a USD con la TRM. */
 export async function iniciarPagoPaypal(entrada: unknown): Promise<ResultadoIniciar> {
@@ -104,7 +104,15 @@ export async function iniciarPagoPaypal(entrada: unknown): Promise<ResultadoInic
 
 export type ResultadoCapturar =
   | { ok: true }
-  | { ok: false; error: "datos_invalidos" | "no_disponible" | "rechazado" | "error_pasarela" };
+  | {
+      ok: false;
+      error:
+        | "datos_invalidos"
+        | "no_disponible"
+        | "rechazado"
+        | "error_pasarela"
+        | "demasiadas_peticiones";
+    };
 
 /**
  * Captura una orden aprobada por el comprador. NO confirma la reserva ni el pedido: eso lo
@@ -277,6 +285,10 @@ async function aplicarEvento(tx: Tx, evento: EventoPaypal): Promise<Confirmacion
   }
 }
 
+/** Mensaje apto para logs: los errores de BD traen parámetros con datos personales. */
 function mensaje(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof ErrorPaypal) return error.message;
+  if (error instanceof Error && !("query" in error) && !("cause" in error && error.cause))
+    return error.message;
+  return errorSinDatos("PayPal", error).message;
 }

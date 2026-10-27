@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Check,
   CircleAlert,
+  Car,
   Clock,
   Minus,
   PawPrint,
@@ -51,10 +52,14 @@ export type ConfigFlujo = {
   maxAdicionales: number;
   precioAdicionalAdulto: number;
   precioAdicionalNino: number;
+  precioMascota: number;
   horaCheckin: string;
   horaCheckout: string;
   minutosHold: number;
 };
+
+/** Tope técnico de backend/src/reservas.ts (esquemaEstadia); no hay límite de negocio. */
+const MAX_MASCOTAS = 20;
 
 const PASOS = ["Fechas", "Huéspedes", "Datos", "Pago", "Confirmación"] as const;
 
@@ -76,6 +81,9 @@ type Datos = {
   pais: string;
   ciudad: string;
   comentarios: string;
+  alergias: string;
+  contactoEmergencia: string;
+  telefonoEmergencia: string;
   aceptaTerminos: boolean;
   aceptaMarketing: boolean;
 };
@@ -89,6 +97,9 @@ const datosIniciales: Datos = {
   pais: "Colombia",
   ciudad: "",
   comentarios: "",
+  alergias: "",
+  contactoEmergencia: "",
+  telefonoEmergencia: "",
   aceptaTerminos: false,
   aceptaMarketing: false,
 };
@@ -105,6 +116,10 @@ function mensajeError(r: Exclude<ResultadoCotizacion | ResultadoCrear, { ok: tru
       return `Pueden alojarse de 1 a ${max} personas.`;
     case "adicionales_invalidos":
       return "Revisa los acompañantes adicionales: superan los lugares disponibles.";
+    case "mascotas_invalidas":
+      return "Revisa el número de mascotas.";
+    case "demasiadas_peticiones":
+      return "Hiciste muchos intentos seguidos. Espera un momento y vuelve a intentarlo.";
     case "sin_configuracion":
       return "Las reservas en línea aún no están habilitadas. Escríbenos por WhatsApp y te ayudamos.";
     case "datos_invalidos":
@@ -312,6 +327,13 @@ function Desglose({ cot, trm }: { cot: Cotizacion; trm: number | null }) {
             trm={trm}
           />
         )}
+        {cot.mascotas > 0 && (
+          <LineaAdicional
+            texto={`${cot.mascotas} ${cot.mascotas === 1 ? "mascota" : "mascotas"} × ${n} ${n === 1 ? "noche" : "noches"}`}
+            cop={cot.extraMascotas}
+            trm={trm}
+          />
+        )}
       </ul>
       <p className="mt-2 flex items-baseline justify-between gap-4 border-t border-verde pt-3">
         <span className="font-medium text-verde">Total</span>
@@ -329,6 +351,7 @@ function Resumen({
   salida,
   huespedes,
   adicionales,
+  mascotas,
   cot,
   trm,
   conDesglose,
@@ -339,6 +362,7 @@ function Resumen({
   salida?: string;
   huespedes: number;
   adicionales: Adicionales;
+  mascotas: number;
   cot: Cotizacion | null;
   trm: Trm | null;
   conDesglose: boolean;
@@ -372,6 +396,12 @@ function Resumen({
           <dt className="font-medium text-verde">Huéspedes</dt>
           <dd>{textoPersonas(huespedes, adicionales)}</dd>
         </div>
+        {mascotas > 0 && (
+          <div>
+            <dt className="font-medium text-verde">Mascotas</dt>
+            <dd>{mascotas}</dd>
+          </div>
+        )}
       </dl>
 
       {cot && (
@@ -495,6 +525,7 @@ export function FlujoReserva({
   );
   // Solo cuentan con el grupo base completo; si baja de maxHuespedes se descartan.
   const [adicionalesElegidos, setAdicionales] = useState<Adicionales>(SIN_ADICIONALES);
+  const [mascotas, setMascotas] = useState(0);
   const grupoCompleto = huespedes >= config.maxHuespedes && config.maxAdicionales > 0;
   const adicionales = grupoCompleto ? adicionalesElegidos : SIN_ADICIONALES;
   const lugaresLibres = config.maxAdicionales - totalAdicionales(adicionales);
@@ -522,7 +553,7 @@ export function FlujoReserva({
     }
     let vigente = true;
     setCotizando(true);
-    cotizar({ llegada, salida, huespedes, adicionales: { adultos, ninos, menores } })
+    cotizar({ llegada, salida, huespedes, adicionales: { adultos, ninos, menores }, mascotas })
       .then((r) => vigente && setCotizacion(r))
       .catch(
         () => vigente && setAviso("No pudimos calcular el precio. Intenta de nuevo en un momento."),
@@ -531,7 +562,7 @@ export function FlujoReserva({
     return () => {
       vigente = false;
     };
-  }, [llegada, salida, huespedes, adultos, ninos, menores]);
+  }, [llegada, salida, huespedes, adultos, ninos, menores, mascotas]);
 
   // Al cambiar de paso: subir y llevar el foco al título (lectores de pantalla).
   useEffect(() => {
@@ -572,7 +603,7 @@ export function FlujoReserva({
     if (!llegada || !salida) return;
     setAviso(null);
     iniciar(async () => {
-      const r = await crearReserva({ llegada, salida, huespedes, adicionales }, datos);
+      const r = await crearReserva({ llegada, salida, huespedes, adicionales, mascotas }, datos);
       if (r.ok) {
         setReserva({ codigo: r.codigo, expiraEn: r.expiraEn });
         setCotizacion(r.cotizacion);
@@ -673,16 +704,12 @@ export function FlujoReserva({
                 {tituloPaso("¿Cuántas personas vienen?")}
                 <p className="mt-2">De 1 a {config.maxHuespedes} personas, de cualquier edad.</p>
                 <p className="mt-4 flex max-w-[65ch] items-start gap-3 rounded-card border border-miel bg-blanco p-4 text-small">
-                  <PawPrint
-                    size={20}
-                    strokeWidth={1.5}
-                    className="shrink-0 text-verde"
-                    aria-hidden
-                  />
+                  <Car size={20} strokeWidth={1.5} className="shrink-0 text-verde" aria-hidden />
                   <span>
-                    <strong className="font-medium text-verde">Lauburu no admite mascotas.</strong>{" "}
-                    Si viajas con la tuya, te recomendamos dejarla al cuidado de alguien de
-                    confianza para que disfrutes tu estadía con tranquilidad.
+                    <strong className="font-medium text-verde">Parqueadero:</strong> hay espacio
+                    para 3 carros o 6 motos.{" "}
+                    <strong className="font-medium text-verde">Malla catamarán:</strong> resiste
+                    hasta 180 kg en total al mismo tiempo.
                   </span>
                 </p>
 
@@ -799,6 +826,31 @@ export function FlujoReserva({
                     </ul>
                   </fieldset>
                 )}
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-card border border-niebla bg-blanco p-5 md:p-6">
+                  <span className="flex items-start gap-3">
+                    <PawPrint
+                      size={20}
+                      strokeWidth={1.5}
+                      className="mt-1 shrink-0 text-verde"
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="block font-medium text-verde">¿Viajas con tu mascota?</span>
+                      <span className="block text-small">
+                        Es bienvenida: <Precio cop={config.precioMascota} trm={trmValor} /> por
+                        mascota, por noche
+                      </span>
+                    </span>
+                  </span>
+                  <Contador
+                    etiqueta="Mascotas"
+                    valor={mascotas}
+                    min={0}
+                    max={MAX_MASCOTAS}
+                    onCambio={(v) => setMascotas(Math.max(0, v))}
+                  />
+                </div>
 
                 <div
                   className="mt-6 rounded-card border border-niebla bg-blanco p-5 md:p-6"
@@ -956,9 +1008,60 @@ export function FlujoReserva({
                   </Campo>
 
                   <Campo
+                    id="campo-alergias"
+                    etiqueta="Alergias o restricciones alimentarias (opcional)"
+                    ayuda={`De cualquier persona del grupo, para tenerlo en cuenta en las comidas. ${datos.alergias.length}/300`}
+                    error={err("alergias")}
+                    className="sm:col-span-2"
+                  >
+                    <textarea
+                      id="campo-alergias"
+                      rows={2}
+                      maxLength={300}
+                      value={datos.alergias}
+                      onChange={(e) => actualizar("alergias", e.target.value)}
+                      aria-invalid={!!err("alergias")}
+                      aria-describedby={describe("alergias", true)}
+                      className={`${claseCampo(!!err("alergias"))} h-auto py-3`}
+                    />
+                  </Campo>
+
+                  <Campo
+                    id="campo-contactoEmergencia"
+                    etiqueta="Contacto de emergencia"
+                    ayuda="Nombre de alguien que no venga contigo"
+                    error={err("contactoEmergencia")}
+                  >
+                    <input
+                      id="campo-contactoEmergencia"
+                      value={datos.contactoEmergencia}
+                      onChange={(e) => actualizar("contactoEmergencia", e.target.value)}
+                      aria-invalid={!!err("contactoEmergencia")}
+                      aria-describedby={describe("contactoEmergencia", true)}
+                      className={claseCampo(!!err("contactoEmergencia"))}
+                    />
+                  </Campo>
+
+                  <Campo
+                    id="campo-telefonoEmergencia"
+                    etiqueta="Celular del contacto de emergencia"
+                    error={err("telefonoEmergencia")}
+                  >
+                    <input
+                      id="campo-telefonoEmergencia"
+                      type="tel"
+                      value={datos.telefonoEmergencia}
+                      onChange={(e) => actualizar("telefonoEmergencia", e.target.value)}
+                      aria-invalid={!!err("telefonoEmergencia")}
+                      aria-describedby={describe("telefonoEmergencia")}
+                      className={claseCampo(!!err("telefonoEmergencia"))}
+                    />
+                  </Campo>
+
+                  <Campo
                     id="campo-comentarios"
                     etiqueta="Comentarios o peticiones especiales (opcional)"
-                    ayuda={`Hora estimada de llegada, alimentación, celebraciones… ${datos.comentarios.length}/300`}
+                    ayuda={`Hora estimada de llegada, celebraciones… ${datos.comentarios.length}/300`}
                     error={err("comentarios")}
                     className="sm:col-span-2"
                   >
@@ -1120,6 +1223,7 @@ export function FlujoReserva({
               salida={salida}
               huespedes={huespedes}
               adicionales={adicionales}
+              mascotas={mascotas}
               cot={cot}
               trm={trm}
               conDesglose={paso === 1}

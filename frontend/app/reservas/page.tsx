@@ -34,6 +34,7 @@ export default async function Reservas() {
         maxAdicionales: config.maxAdicionales,
         precioAdicionalAdulto: config.precioAdicionalAdulto,
         precioAdicionalNino: config.precioAdicionalNino,
+        precioMascota: config.precioMascota,
         horaCheckin: config.horaCheckin,
         horaCheckout: config.horaCheckout,
         minutosHold: config.minutosHold,

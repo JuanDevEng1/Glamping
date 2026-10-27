@@ -7,6 +7,7 @@ import { correoConfigurado, correosAdmin, enviarCorreo } from "./correos";
 import {
   ajustesFecha,
   configuracion,
+  errorSinDatos,
   festivos,
   getDb,
   reservas,
@@ -50,6 +51,7 @@ export const esquemaEstadia = z.object({
   adicionales: z
     .object({ adultos: cantidad, ninos: cantidad, menores: cantidad })
     .default(SIN_ADICIONALES),
+  mascotas: cantidad,
 });
 
 export const TIPOS_DOCUMENTO = {
@@ -59,6 +61,12 @@ export const TIPOS_DOCUMENTO = {
 } as const;
 
 export type TipoDocumento = keyof typeof TIPOS_DOCUMENTO;
+
+const celular = (error: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9 ()-]{7,20}$/, { error });
 
 const opcional = (max: number, error: string) =>
   z
@@ -82,13 +90,17 @@ export const esquemaHuesped = z.object({
     .trim()
     .regex(/^[A-Za-z0-9-]{4,20}$/, { error: "Revisa el número de documento" }),
   correo: z.email({ error: "Revisa tu correo electrónico" }).max(200),
-  telefono: z
-    .string()
-    .trim()
-    .regex(/^\+?[0-9 ()-]{7,20}$/, { error: "Revisa tu número de celular" }),
+  telefono: celular("Revisa tu número de celular"),
   pais: z.string().trim().min(2, { error: "Escribe tu país" }).max(60),
   ciudad: opcional(80, "Máximo 80 caracteres"),
   comentarios: opcional(300, "Máximo 300 caracteres"),
+  alergias: opcional(300, "Máximo 300 caracteres"),
+  contactoEmergencia: z
+    .string()
+    .trim()
+    .min(3, { error: "Escribe el nombre de tu contacto de emergencia" })
+    .max(120, { error: "Máximo 120 caracteres" }),
+  telefonoEmergencia: celular("Revisa el celular de tu contacto de emergencia"),
   aceptaTerminos: z.literal(true, {
     error: "Debes aceptar los términos y la política de cancelación",
   }),
@@ -180,7 +192,9 @@ export async function obtenerCalendario(mes: string): Promise<DiaCalendario[] | 
 }
 
 export type ResultadoCotizacion =
-  Cotizacion | ErrorCotizacion | { ok: false; error: "sin_configuracion" };
+  | Cotizacion
+  | ErrorCotizacion
+  | { ok: false; error: "sin_configuracion" | "demasiadas_peticiones" };
 
 export async function cotizarEstadia(entrada: unknown): Promise<ResultadoCotizacion> {
   const parsed = esquemaEstadia.safeParse(entrada);
@@ -212,7 +226,7 @@ function esViolacionSinCruce(error: unknown) {
 export type ResultadoCrear =
   | { ok: true; codigo: string; expiraEn: string; cotizacion: Cotizacion }
   | (ErrorCotizacion & { errores?: undefined })
-  | { ok: false; error: "sin_configuracion" }
+  | { ok: false; error: "sin_configuracion" | "demasiadas_peticiones" }
   | { ok: false; error: "datos_invalidos"; errores: Record<string, string[] | undefined> };
 
 /**
@@ -236,7 +250,7 @@ export async function crearReservaPendiente(entrada: {
   }
   if (!process.env.DATABASE_URL) return { ok: false, error: "sin_configuracion" };
 
-  const { llegada, salida, huespedes, adicionales } = estadia.data;
+  const { llegada, salida, huespedes, adicionales, mascotas } = estadia.data;
   const { aceptaTerminos: _, ...datosHuesped } = huesped.data;
   if (salida <= llegada) return { ok: false, error: "fechas_invalidas" };
 
@@ -263,6 +277,7 @@ export async function crearReservaPendiente(entrada: {
           adultosAdicionales: adicionales.adultos,
           ninosAdicionales: adicionales.ninos,
           menoresAdicionales: adicionales.menores,
+          mascotas,
           estado: "pendiente",
           totalCop: cotizacion.total,
           desglose: cotizacion.noches,
@@ -281,7 +296,7 @@ export async function crearReservaPendiente(entrada: {
     });
   } catch (error) {
     if (esViolacionSinCruce(error)) return { ok: false, error: "no_disponible" };
-    throw error;
+    throw errorSinDatos("No se pudo crear la reserva", error);
   }
 }
 
@@ -343,6 +358,7 @@ export type ReservaPublica = {
   fechaSalida: string;
   huespedes: number;
   adicionales: Adicionales;
+  mascotas: number;
   totalCop: number;
   expiraEn: string;
   documentoRecibido: boolean;
@@ -375,6 +391,7 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
       adultosAdicionales: reservas.adultosAdicionales,
       ninosAdicionales: reservas.ninosAdicionales,
       menoresAdicionales: reservas.menoresAdicionales,
+      mascotas: reservas.mascotas,
       totalCop: reservas.totalCop,
       expiraEn: reservas.expiraEn,
       documentoRecibidoEn: reservas.documentoRecibidoEn,
@@ -433,6 +450,7 @@ export type ResultadoDocumento =
         | "no_disponible"
         | "ya_recibido"
         | "error_correo"
+        | "demasiadas_peticiones"
         | "sin_configuracion";
     };
 
@@ -442,10 +460,10 @@ const fechaLarga = (fecha: string) =>
   );
 
 /** "15:00:00" → "3:00 p. m." (igual que formatoHora del frontend). */
-const horaCorta = (hora: string) =>
-  new Intl.DateTimeFormat("es-CO", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(
-    new Date(`2000-01-01T${hora.slice(0, 5)}:00Z`),
-  );
+const horaCorta = (hora: string) => {
+  const [h = 0, m = 0] = hora.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "a. m." : "p. m."}`;
+};
 
 /**
  * Envía al admin, como adjunto, el documento que sube el titular de una reserva confirmada.
@@ -494,8 +512,13 @@ export async function recibirDocumentoReserva(
         ...(totalAdicionales(adicionales) > 0
           ? [`Adicionales: ${detalleAdicionales(adicionales).join(", ")}`]
           : []),
+        ...(r.mascotas > 0 ? [`Mascotas: ${r.mascotas}`] : []),
+        `Alergias o restricciones alimentarias: ${r.alergias ?? "ninguna indicada"}`,
         `Correo: ${r.correo}`,
         `Celular: ${r.telefono}`,
+        ...(r.contactoEmergencia
+          ? [`Contacto de emergencia: ${r.contactoEmergencia} · ${r.telefonoEmergencia ?? ""}`]
+          : []),
         "",
         "Al hacer el check-in, compara este documento con el original para confirmar que es la misma persona que reservó.",
         "",

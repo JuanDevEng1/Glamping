@@ -7,6 +7,7 @@ import {
   aliados,
   configuracion,
   cuposServicio,
+  errorSinDatos,
   getDb,
   itemsPedido,
   pedidos,
@@ -273,7 +274,8 @@ const esquemaVinculo = z.object({
     .trim()
     .toUpperCase()
     .regex(/^LAU-[A-Z0-9]{8}$/),
-  correo: z.email().trim().toLowerCase(),
+  // Recorta antes de validar: el autocompletado del celular suele dejar un espacio al final.
+  correo: z.string().trim().toLowerCase().pipe(z.email()),
 });
 
 /** Devuelve la estadía si el código y el correo coinciden con una reserva confirmada. */
@@ -333,7 +335,7 @@ async function catalogoDe(ej: Db | Tx, ids: number[]) {
 
 export type ValidacionCarrito = ResultadoCarrito & {
   reserva: EstadiaVinculada | null;
-  error?: "carrito_invalido" | "reserva_invalida";
+  error?: "carrito_invalido" | "reserva_invalida" | "demasiadas_peticiones";
 };
 
 /** Recalcula precios y disponibilidad del carrito en el servidor. */
@@ -362,7 +364,7 @@ export type ResultadoPedido =
   | { ok: true; codigo: string; expiraEn: string; carrito: ResultadoCarrito }
   | { ok: false; error: "datos_invalidos"; errores: Record<string, string[] | undefined> }
   | { ok: false; error: "carrito_invalido"; carrito?: ResultadoCarrito }
-  | { ok: false; error: "reserva_invalida" | "sin_configuracion" };
+  | { ok: false; error: "reserva_invalida" | "sin_configuracion" | "demasiadas_peticiones" };
 
 /**
  * Crea el pedido "pendiente" que aparta los cupos mientras el comprador paga.
@@ -400,54 +402,58 @@ export async function crearPedidoPendiente(entrada: {
   const { aceptaTerminos: _, ...datosComprador } = comprador.data;
   const ids = [...new Set(items.data.map((i) => i.servicioId))];
 
-  return getDb().transaction(async (tx) => {
-    // Libera los apartados vencidos antes de calcular disponibilidad.
-    await tx
-      .update(pedidos)
-      .set({ estado: "expirado" })
-      .where(and(eq(pedidos.estado, "pendiente"), lt(pedidos.expiraEn, sql`now()`)));
+  try {
+    return await getDb().transaction(async (tx) => {
+      // Libera los apartados vencidos antes de calcular disponibilidad.
+      await tx
+        .update(pedidos)
+        .set({ estado: "expirado" })
+        .where(and(eq(pedidos.estado, "pendiente"), lt(pedidos.expiraEn, sql`now()`)));
 
-    const [config] = await tx.select().from(configuracion).limit(1);
-    const catalogo = await catalogoDe(tx, ids);
-    const disp = await cargarDisponibilidad(tx, ids, null, true);
-    const carrito = cotizarCarrito(items.data, catalogo, disp, {
-      hoy: hoyEnBogota(),
-      estadia: reserva,
+      const [config] = await tx.select().from(configuracion).limit(1);
+      const catalogo = await catalogoDe(tx, ids);
+      const disp = await cargarDisponibilidad(tx, ids, null, true);
+      const carrito = cotizarCarrito(items.data, catalogo, disp, {
+        hoy: hoyEnBogota(),
+        estadia: reserva,
+      });
+      if (!carrito.valido) return { ok: false, error: "carrito_invalido", carrito } as const;
+
+      const [pedido] = await tx
+        .insert(pedidos)
+        .values({
+          codigo: nuevoCodigo("SRV"),
+          reservaId,
+          estado: "pendiente",
+          totalCop: carrito.total,
+          ...datosComprador,
+          expiraEn: sql`now() + make_interval(mins => ${config?.minutosHold ?? 20})`,
+          terminosVersion: config?.versionTerminos ?? "1",
+        })
+        .returning({ id: pedidos.id, codigo: pedidos.codigo, expiraEn: pedidos.expiraEn });
+
+      await tx.insert(itemsPedido).values(
+        carrito.lineas.map((l) => ({
+          pedidoId: pedido!.id,
+          servicioId: l.servicioId,
+          fecha: l.fecha,
+          turno: l.turno,
+          cantidad: l.cantidad,
+          precioUnitario: l.precioUnitario,
+          subtotal: l.subtotal,
+        })),
+      );
+
+      return {
+        ok: true,
+        codigo: pedido!.codigo,
+        expiraEn: pedido!.expiraEn.toISOString(),
+        carrito,
+      } as const;
     });
-    if (!carrito.valido) return { ok: false, error: "carrito_invalido", carrito } as const;
-
-    const [pedido] = await tx
-      .insert(pedidos)
-      .values({
-        codigo: nuevoCodigo("SRV"),
-        reservaId,
-        estado: "pendiente",
-        totalCop: carrito.total,
-        ...datosComprador,
-        expiraEn: sql`now() + make_interval(mins => ${config?.minutosHold ?? 20})`,
-        terminosVersion: config?.versionTerminos ?? "1",
-      })
-      .returning({ id: pedidos.id, codigo: pedidos.codigo, expiraEn: pedidos.expiraEn });
-
-    await tx.insert(itemsPedido).values(
-      carrito.lineas.map((l) => ({
-        pedidoId: pedido!.id,
-        servicioId: l.servicioId,
-        fecha: l.fecha,
-        turno: l.turno,
-        cantidad: l.cantidad,
-        precioUnitario: l.precioUnitario,
-        subtotal: l.subtotal,
-      })),
-    );
-
-    return {
-      ok: true,
-      codigo: pedido!.codigo,
-      expiraEn: pedido!.expiraEn.toISOString(),
-      carrito,
-    } as const;
-  });
+  } catch (error) {
+    throw errorSinDatos("No se pudo crear el pedido", error);
+  }
 }
 
 /** Libera un pedido que sigue pendiente de pago (el comprador volvió atrás). */

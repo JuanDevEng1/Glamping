@@ -48,7 +48,9 @@ export function VincularReserva({ codigoInicial = "" }: { codigoInicial?: string
     setError(null);
     iniciar(async () => {
       const r = await vincularReservaAccion(codigo, correo);
-      if (r) {
+      if (r && "error" in r) {
+        setError("Hiciste varios intentos seguidos. Espera unos minutos y vuelve a intentarlo.");
+      } else if (r) {
         vincular({ ...r, correo: correo.trim().toLowerCase() });
         setAbierto(false);
       } else {

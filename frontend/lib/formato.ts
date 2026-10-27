@@ -32,14 +32,14 @@ export function formatoPrecioCorto(montoCop: number, moneda: Moneda, trm: number
   return `${Number.isInteger(miles) ? miles : miles.toFixed(1).replace(".", ",")}k`;
 }
 
-/** "15:00:00" (columna time de Postgres) → "3:00 p. m." */
+/**
+ * "15:00:00" (columna time de Postgres) → "3:00 p. m."
+ * A mano y no con toLocaleTimeString: Node y cada navegador usan espacios distintos (normal,
+ * no separable o estrecho) antes de "p. m.", y eso rompe la hidratación.
+ */
 export function formatoHora(hora: string) {
   const [h = 0, m = 0] = hora.split(":").map(Number);
-  return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString("es-CO", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-  });
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "a. m." : "p. m."}`;
 }
 
 function fechaUtc(fecha: string) {

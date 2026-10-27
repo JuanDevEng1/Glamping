@@ -138,6 +138,11 @@ export default async function ConfirmacionReserva({
                         Adicionales: {detalleAdicionales(reserva.adicionales).join(", ")}
                       </dd>
                     )}
+                    {reserva.mascotas > 0 && (
+                      <dd className="text-xs">
+                        {reserva.mascotas} {reserva.mascotas === 1 ? "mascota" : "mascotas"}
+                      </dd>
+                    )}
                   </div>
                   <div>
                     <dt className="font-medium text-verde">

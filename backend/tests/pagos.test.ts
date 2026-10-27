@@ -103,7 +103,8 @@ describe.skipIf(!url)("pagos con PayPal en BD de pruebas", () => {
           ),
         );
     await conn.delete(db.eventosPasarela).where(like(db.eventosPasarela.idEvento, `${PREFIJO}%`));
-    if (idsReserva.length) await conn.delete(db.reservas).where(inArray(db.reservas.id, idsReserva));
+    if (idsReserva.length)
+      await conn.delete(db.reservas).where(inArray(db.reservas.id, idsReserva));
     if (idsPedido.length) await conn.delete(db.pedidos).where(inArray(db.pedidos.id, idsPedido));
     await conn.delete(db.cuposServicio).where(eq(db.cuposServicio.servicioId, servicioId));
     await conn.delete(db.servicios).where(eq(db.servicios.id, servicioId));
@@ -126,6 +127,8 @@ describe.skipIf(!url)("pagos con PayPal en BD de pruebas", () => {
         correo: "pagos@example.com",
         telefono: "3000000000",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     });

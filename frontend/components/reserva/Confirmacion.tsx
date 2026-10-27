@@ -55,6 +55,7 @@ const ERRORES_DOCUMENTO: Record<Exclude<ResultadoDocumento, { ok: true }>["error
   ya_recibido: "",
   error_correo: "No pudimos enviar tu documento. Intenta de nuevo en unos minutos.",
   sin_configuracion: "No pudimos enviar tu documento. Intenta de nuevo en unos minutos.",
+  demasiadas_peticiones: "Hiciste varios intentos seguidos. Espera un rato y vuelve a intentarlo.",
 };
 
 /** Paso posterior al pago: el titular sube su documento y se envía al admin por correo. */

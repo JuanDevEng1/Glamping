@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -41,6 +42,8 @@ export const configuracion = pgTable(
     precioAdicionalAdulto: integer().notNull().default(90_000),
     /** Por noche, niños de 4 a 11 años. */
     precioAdicionalNino: integer().notNull().default(60_000),
+    /** Por mascota y por noche. Las mascotas no cuentan como huéspedes. */
+    precioMascota: integer().notNull().default(50_000),
     maxHuespedes: integer().notNull().default(6),
     huespedesIncluidos: integer().notNull().default(2),
     horaCheckin: time().notNull().default("15:00"),
@@ -69,6 +72,7 @@ export const configuracion = pgTable(
       "configuracion_adicionales",
       sql`${t.maxAdicionales} >= 0 and ${t.precioAdicionalAdulto} >= 0 and ${t.precioAdicionalNino} >= 0`,
     ),
+    check("configuracion_mascotas", sql`${t.precioMascota} >= 0`),
   ],
 );
 
@@ -127,6 +131,7 @@ export const reservas = pgTable(
     ninosAdicionales: integer().notNull().default(0),
     /** Menores de 4 años (no pagan). */
     menoresAdicionales: integer().notNull().default(0),
+    mascotas: integer().notNull().default(0),
     estado: text({ enum: ESTADOS_RESERVA }).notNull().default("pendiente"),
     totalCop: integer().notNull(),
     desglose: jsonb().$type<Noche[]>().notNull(),
@@ -138,6 +143,11 @@ export const reservas = pgTable(
     pais: text().notNull(),
     ciudad: text(),
     comentarios: text(),
+    /** Alergias o restricciones alimentarias del grupo. */
+    alergias: text(),
+    /** Obligatorios en reservas nuevas; nulos en las anteriores a este campo. */
+    contactoEmergencia: text(),
+    telefonoEmergencia: text(),
     pasarela: text(),
     expiraEn: timestamp({ withTimezone: true }).notNull(),
     terminosVersion: text().notNull(),
@@ -153,6 +163,7 @@ export const reservas = pgTable(
       "reservas_adicionales",
       sql`${t.adultosAdicionales} >= 0 and ${t.ninosAdicionales} >= 0 and ${t.menoresAdicionales} >= 0`,
     ),
+    check("reservas_mascotas", sql`${t.mascotas} >= 0`),
     check(
       "reservas_estado",
       sql`${t.estado} in ('pendiente', 'confirmada', 'cancelada', 'expirada')`,
@@ -340,6 +351,16 @@ export const eventosPasarela = pgTable(
   (t) => [unique("eventos_pasarela_unico").on(t.pasarela, t.idEvento)],
 );
 
+/**
+ * Límite de peticiones por acción e IP (ventana fija). La clave va con hash: no se guardan IPs.
+ * En Postgres y no en memoria porque el sitio corre en varias instancias sin servidor.
+ */
+export const limitesPeticiones = pgTable("limites_peticiones", {
+  clave: text().primaryKey(),
+  inicio: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  conteo: integer().notNull(),
+});
+
 export const schema = {
   configuracion,
   temporadas,
@@ -353,6 +374,7 @@ export const schema = {
   itemsPedido,
   pagos,
   eventosPasarela,
+  limitesPeticiones,
 };
 
 // ---------------------------------------------------------------------------
@@ -390,4 +412,47 @@ export async function obtenerConfiguracion(): Promise<Configuracion | null> {
   if (!process.env.DATABASE_URL) return null;
   const [fila] = await getDb().select().from(configuracion).limit(1);
   return fila ?? null;
+}
+
+/** Respuesta de una acción pública que superó su límite de peticiones. */
+export const DEMASIADAS_PETICIONES = { ok: false, error: "demasiadas_peticiones" } as const;
+
+/**
+ * Cuenta una petición de `clave` y dice si sigue dentro de `max` por cada `segundos`.
+ * Un solo INSERT … ON CONFLICT: dos peticiones simultáneas no se saltan el conteo.
+ * Sin DATABASE_URL (desarrollo sin BD) siempre permite.
+ */
+export async function permitirPeticion(clave: string, max: number, segundos: number) {
+  if (!process.env.DATABASE_URL) return true;
+  const hash = createHash("sha256").update(clave).digest("hex");
+  const vencida = sql`${limitesPeticiones.inicio} < now() - make_interval(secs => ${segundos})`;
+  const [fila] = await getDb()
+    .insert(limitesPeticiones)
+    .values({ clave: hash, conteo: 1 })
+    .onConflictDoUpdate({
+      target: limitesPeticiones.clave,
+      set: {
+        conteo: sql`case when ${vencida} then 1 else ${limitesPeticiones.conteo} + 1 end`,
+        inicio: sql`case when ${vencida} then now() else ${limitesPeticiones.inicio} end`,
+      },
+    })
+    .returning({ conteo: limitesPeticiones.conteo });
+  // De vez en cuando se borran las ventanas viejas para que la tabla no crezca.
+  if (Math.random() < 0.01) {
+    await getDb()
+      .delete(limitesPeticiones)
+      .where(sql`${limitesPeticiones.inicio} < now() - interval '1 day'`);
+  }
+  return (fila?.conteo ?? 0) <= max;
+}
+
+/**
+ * Error de BD apto para logs. El mensaje de Drizzle trae la consulta y sus parámetros
+ * (nombre, correo, documento…); aquí solo queda el código y la restricción de Postgres.
+ */
+export function errorSinDatos(contexto: string, error: unknown) {
+  const e = error as { code?: string; constraint_name?: string; cause?: unknown };
+  const pg = (e?.cause ?? e) as { code?: string; constraint_name?: string };
+  const detalle = [pg?.code, pg?.constraint_name].filter(Boolean).join(" ");
+  return new Error(`${contexto}: error de base de datos${detalle ? ` (${detalle})` : ""}`);
 }

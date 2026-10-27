@@ -79,6 +79,8 @@ export function CompraServicio({ servicio, fechasIniciales, unidadesIniciales }:
     fechasEnEstadiaAccion(servicio.slug, vinculo(reserva)!).then((r) => {
       if (!vigente) return;
       if (!r) return vincular(null);
+      // Límite de peticiones: se conservan las fechas que ya había.
+      if ("error" in r) return;
       setFechas(r.fechas);
       setUnidades(r.unidadesLibres);
     });

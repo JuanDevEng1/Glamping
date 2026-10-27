@@ -73,6 +73,8 @@ const MENSAJES_INICIO: Record<Exclude<ResultadoIniciar, { ok: true }>["error"], 
   sin_configuracion: "El pago con PayPal no está disponible en este momento.",
   datos_invalidos: "No pudimos iniciar el pago. Recarga la página e intenta de nuevo.",
   error_pasarela: "No pudimos conectar con PayPal. Intenta de nuevo en un momento.",
+  demasiadas_peticiones:
+    "Hiciste muchos intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
 };
 
 const MENSAJES_CAPTURA: Record<Exclude<ResultadoCapturar, { ok: true }>["error"], string> = {
@@ -81,6 +83,8 @@ const MENSAJES_CAPTURA: Record<Exclude<ResultadoCapturar, { ok: true }>["error"]
   datos_invalidos: "No pudimos completar el pago. Recarga la página e intenta de nuevo.",
   error_pasarela:
     "No pudimos confirmar el cobro con PayPal. Si ves el cargo en tu cuenta, escríbenos por WhatsApp con tu código.",
+  demasiadas_peticiones:
+    "Hiciste muchos intentos seguidos. Espera unos minutos; si ves el cargo en tu cuenta, escríbenos por WhatsApp con tu código.",
 };
 
 /** Medio de pago disponible (por ahora solo PayPal) con el cobro aproximado en USD. */

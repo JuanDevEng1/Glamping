@@ -4,15 +4,40 @@
 // El paso 5 (Confirmación) es /reservas/confirmacion/[codigo] y reutiliza PasosReserva.
 // Todo precio sale del servidor (acciones.ts → backend/src/precios.ts).
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, ArrowRight, Check, CircleAlert, Clock, Minus, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CircleAlert,
+  Clock,
+  Minus,
+  PawPrint,
+  Plus,
+} from "lucide-react";
 import type { Trm } from "@lauburu/backend/moneda";
-import type { Cotizacion, TipoNoche } from "@lauburu/backend/precios";
-import type { ResultadoCotizacion, ResultadoCrear } from "@lauburu/backend/reservas";
-import { cotizar, crearReserva, liberarReserva } from "@/app/reservas/acciones";
+import type { ClientePaypal } from "@lauburu/backend/paypal";
+import {
+  SIN_ADICIONALES,
+  textoPersonas,
+  totalAdicionales,
+  type Adicionales,
+  type Cotizacion,
+  type TipoNoche,
+} from "@lauburu/backend/precios";
+import type { ResultadoCotizacion, ResultadoCrear, TipoDocumento } from "@lauburu/backend/reservas";
+import { useRouter } from "next/navigation";
+import {
+  capturarPagoReserva,
+  cotizar,
+  crearReserva,
+  iniciarPagoReserva,
+  liberarReserva,
+} from "@/app/reservas/acciones";
 import { Container } from "@/components/Container";
-import { NotaMoneda, Precio, useMoneda } from "@/components/Moneda";
+import { NotaMoneda, Precio } from "@/components/Moneda";
+import { BotonPaypal, MedioPaypal } from "@/components/pago/BotonPaypal";
 import { FotoPendiente, claseBoton } from "@/components/ui";
-import { formatoFechaCorta, formatoHora, formatoPrecio } from "@/lib/formato";
+import { formatoFechaCorta, formatoHora } from "@/lib/formato";
 import { enlaceWhatsApp } from "@/lib/sitio";
 import { Calendario } from "./Calendario";
 
@@ -23,6 +48,9 @@ import { Calendario } from "./Calendario";
 export type ConfigFlujo = {
   maxHuespedes: number;
   huespedesIncluidos: number;
+  maxAdicionales: number;
+  precioAdicionalAdulto: number;
+  precioAdicionalNino: number;
   horaCheckin: string;
   horaCheckout: string;
   minutosHold: number;
@@ -35,28 +63,9 @@ const TIPOS_NOCHE: Record<TipoNoche, string> = {
   alta: "Fin de semana",
   puente: "Puente festivo",
   festivo: "Festivo",
-  temporada: "Temporada",
-  ajuste: "Tarifa especial",
+  temporada: "Temporada alta",
+  ajuste: "Fecha especial",
 };
-
-const TIPOS_DOCUMENTO = [
-  ["CC", "Cédula de ciudadanía"],
-  ["CE", "Cédula de extranjería"],
-  ["PA", "Pasaporte"],
-] as const;
-
-// TODO(tarea pasarelas): ajustar descripciones según lo que habilite cada cuenta.
-export const PASARELAS = [
-  {
-    id: "wompi",
-    nombre: "Wompi",
-    detalle: "Pago nacional con tarjeta o PSE, en pesos colombianos.",
-  },
-  { id: "bold", nombre: "Bold", detalle: "Pago nacional con tarjeta, en pesos colombianos." },
-  { id: "paypal", nombre: "PayPal", detalle: "Pago internacional en dólares estadounidenses." },
-] as const;
-
-export type Pasarela = (typeof PASARELAS)[number]["id"];
 
 type Datos = {
   nombre: string;
@@ -94,6 +103,8 @@ function mensajeError(r: Exclude<ResultadoCotizacion | ResultadoCrear, { ok: tru
       return "Esas fechas ya no están disponibles. Elige otras, por favor.";
     case "huespedes_invalidos":
       return `Pueden alojarse de 1 a ${max} personas.`;
+    case "adicionales_invalidos":
+      return "Revisa los acompañantes adicionales: superan los lugares disponibles.";
     case "sin_configuracion":
       return "Las reservas en línea aún no están habilitadas. Escríbenos por WhatsApp y te ayudamos.";
     case "datos_invalidos":
@@ -177,6 +188,77 @@ export function Aviso({ children }: { children: React.ReactNode }) {
   );
 }
 
+function LineaAdicional({
+  texto,
+  detalle,
+  cop,
+  trm,
+}: {
+  texto: string;
+  detalle?: string;
+  cop: number;
+  trm: number | null;
+}) {
+  return (
+    <li className="flex items-baseline justify-between gap-4 py-2 text-small">
+      <span>
+        {texto}
+        {detalle && <span className="block text-xs text-verde">{detalle}</span>}
+      </span>
+      <span className="shrink-0 font-medium text-verde">
+        {cop === 0 ? "Gratis" : <Precio cop={cop} trm={trm} />}
+      </span>
+    </li>
+  );
+}
+
+/** − número + accesible. `etiqueta` nombra lo que se cuenta para los lectores de pantalla. */
+function Contador({
+  etiqueta,
+  valor,
+  min,
+  max,
+  onCambio,
+}: {
+  etiqueta: string;
+  valor: number;
+  min: number;
+  max: number;
+  onCambio: (valor: number) => void;
+}) {
+  const boton =
+    "inline-flex size-11 items-center justify-center rounded-full border-[1.5px] border-verde text-verde transition-colors duration-200 hover:bg-verde hover:text-crema disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-verde";
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onCambio(valor - 1)}
+        disabled={valor <= min}
+        aria-label={`Quitar: ${etiqueta}`}
+        className={boton}
+      >
+        <Minus size={20} strokeWidth={1.5} />
+      </button>
+      <output
+        aria-live="polite"
+        aria-label={etiqueta}
+        className="min-w-8 text-center font-serif text-h3 text-verde"
+      >
+        {valor}
+      </output>
+      <button
+        type="button"
+        onClick={() => onCambio(valor + 1)}
+        disabled={valor >= max}
+        aria-label={`Agregar: ${etiqueta}`}
+        className={boton}
+      >
+        <Plus size={20} strokeWidth={1.5} />
+      </button>
+    </div>
+  );
+}
+
 function Desglose({ cot, trm }: { cot: Cotizacion; trm: number | null }) {
   const n = cot.noches.length;
   return (
@@ -208,6 +290,28 @@ function Desglose({ cot, trm }: { cot: Cotizacion; trm: number | null }) {
             </span>
           </li>
         )}
+        {cot.adicionales.adultos > 0 && (
+          <LineaAdicional
+            texto={`${cot.adicionales.adultos} ${cot.adicionales.adultos === 1 ? "adulto adicional" : "adultos adicionales"} × ${n} ${n === 1 ? "noche" : "noches"}`}
+            detalle="Incluye desayuno"
+            cop={cot.adicionales.adultos * cot.precioAdicionalAdulto * n}
+            trm={trm}
+          />
+        )}
+        {cot.adicionales.ninos > 0 && (
+          <LineaAdicional
+            texto={`${cot.adicionales.ninos} ${cot.adicionales.ninos === 1 ? "niño" : "niños"} de 4 a 11 años × ${n} ${n === 1 ? "noche" : "noches"}`}
+            cop={cot.adicionales.ninos * cot.precioAdicionalNino * n}
+            trm={trm}
+          />
+        )}
+        {cot.adicionales.menores > 0 && (
+          <LineaAdicional
+            texto={`${cot.adicionales.menores} ${cot.adicionales.menores === 1 ? "menor" : "menores"} de 4 años`}
+            cop={0}
+            trm={trm}
+          />
+        )}
       </ul>
       <p className="mt-2 flex items-baseline justify-between gap-4 border-t border-verde pt-3">
         <span className="font-medium text-verde">Total</span>
@@ -224,6 +328,7 @@ function Resumen({
   llegada,
   salida,
   huespedes,
+  adicionales,
   cot,
   trm,
   conDesglose,
@@ -233,6 +338,7 @@ function Resumen({
   llegada?: string;
   salida?: string;
   huespedes: number;
+  adicionales: Adicionales;
   cot: Cotizacion | null;
   trm: Trm | null;
   conDesglose: boolean;
@@ -249,12 +355,12 @@ function Resumen({
       </h2>
       <dl className="mt-4 grid grid-cols-2 gap-4 text-small">
         <div>
-          <dt className="font-medium text-verde">Llegada</dt>
+          <dt className="font-medium text-verde">Llegada (check-in)</dt>
           <dd>{llegada ? formatoFechaCorta(llegada) : "Elige una fecha"}</dd>
           <dd className="text-xs">Desde las {formatoHora(config.horaCheckin)}</dd>
         </div>
         <div>
-          <dt className="font-medium text-verde">Salida</dt>
+          <dt className="font-medium text-verde">Salida (check-out)</dt>
           <dd>{salida ? formatoFechaCorta(salida) : "Elige una fecha"}</dd>
           <dd className="text-xs">Hasta las {formatoHora(config.horaCheckout)}</dd>
         </div>
@@ -264,9 +370,7 @@ function Resumen({
         </div>
         <div>
           <dt className="font-medium text-verde">Huéspedes</dt>
-          <dd>
-            {huespedes} {huespedes === 1 ? "persona" : "personas"}
-          </dd>
+          <dd>{textoPersonas(huespedes, adicionales)}</dd>
         </div>
       </dl>
 
@@ -369,20 +473,31 @@ export function CuentaRegresiva({
 
 export function FlujoReserva({
   config,
+  tiposDocumento,
   trm,
   hoy,
+  paypal,
 }: {
   config: ConfigFlujo;
+  /** TIPOS_DOCUMENTO de backend/src/reservas.ts (el cliente no puede importar ese módulo). */
+  tiposDocumento: Readonly<Record<TipoDocumento, string>>;
   trm: Trm | null;
   hoy: string;
+  /** Null si PayPal no está configurado o no hay TRM utilizable. */
+  paypal: ClientePaypal | null;
 }) {
-  const { moneda } = useMoneda();
+  const router = useRouter();
   const [paso, setPaso] = useState(1);
   const [llegada, setLlegada] = useState<string>();
   const [salida, setSalida] = useState<string>();
   const [huespedes, setHuespedes] = useState(
     Math.min(config.huespedesIncluidos, config.maxHuespedes),
   );
+  // Solo cuentan con el grupo base completo; si baja de maxHuespedes se descartan.
+  const [adicionalesElegidos, setAdicionales] = useState<Adicionales>(SIN_ADICIONALES);
+  const grupoCompleto = huespedes >= config.maxHuespedes && config.maxAdicionales > 0;
+  const adicionales = grupoCompleto ? adicionalesElegidos : SIN_ADICIONALES;
+  const lugaresLibres = config.maxAdicionales - totalAdicionales(adicionales);
   const [cotizacion, setCotizacion] = useState<ResultadoCotizacion | null>(null);
   const [cotizando, setCotizando] = useState(false);
   const [datos, setDatos] = useState<Datos>(datosIniciales);
@@ -390,7 +505,6 @@ export function FlujoReserva({
   const [aviso, setAviso] = useState<string | null>(null);
   const [reserva, setReserva] = useState<{ codigo: string; expiraEn: string } | null>(null);
   const [holdVencido, setHoldVencido] = useState(false);
-  const [pasarela, setPasarela] = useState<Pasarela>("wompi");
   const [version, setVersion] = useState(0);
   const [enviando, iniciar] = useTransition();
   const titulo = useRef<HTMLHeadingElement>(null);
@@ -400,6 +514,7 @@ export function FlujoReserva({
   const cot = cotizacion?.ok ? cotizacion : null;
 
   // Cotización en el servidor cada vez que cambian fechas o huéspedes.
+  const { adultos, ninos, menores } = adicionales;
   useEffect(() => {
     if (!llegada || !salida) {
       setCotizacion(null);
@@ -407,7 +522,7 @@ export function FlujoReserva({
     }
     let vigente = true;
     setCotizando(true);
-    cotizar({ llegada, salida, huespedes })
+    cotizar({ llegada, salida, huespedes, adicionales: { adultos, ninos, menores } })
       .then((r) => vigente && setCotizacion(r))
       .catch(
         () => vigente && setAviso("No pudimos calcular el precio. Intenta de nuevo en un momento."),
@@ -416,7 +531,7 @@ export function FlujoReserva({
     return () => {
       vigente = false;
     };
-  }, [llegada, salida, huespedes]);
+  }, [llegada, salida, huespedes, adultos, ninos, menores]);
 
   // Al cambiar de paso: subir y llevar el foco al título (lectores de pantalla).
   useEffect(() => {
@@ -437,6 +552,10 @@ export function FlujoReserva({
     setPaso(destino);
   }
 
+  function cambiarAdicional(tipo: keyof Adicionales, valor: number) {
+    setAdicionales({ ...adicionales, [tipo]: Math.max(0, valor) });
+  }
+
   function cambiarFechas(l?: string, s?: string) {
     setAviso(null);
     setLlegada(l);
@@ -453,7 +572,7 @@ export function FlujoReserva({
     if (!llegada || !salida) return;
     setAviso(null);
     iniciar(async () => {
-      const r = await crearReserva({ llegada, salida, huespedes }, datos);
+      const r = await crearReserva({ llegada, salida, huespedes, adicionales }, datos);
       if (r.ok) {
         setReserva({ codigo: r.codigo, expiraEn: r.expiraEn });
         setCotizacion(r.cotizacion);
@@ -532,6 +651,15 @@ export function FlujoReserva({
                     onCambio={cambiarFechas}
                   />
                 </div>
+                <p className="mt-4 flex max-w-[65ch] items-start gap-3 rounded-card border border-miel bg-blanco p-4 text-small">
+                  <Clock size={20} strokeWidth={1.5} className="shrink-0 text-verde" aria-hidden />
+                  <span>
+                    <strong className="font-medium text-verde">Entrada (check-in):</strong> desde
+                    las {formatoHora(config.horaCheckin)} ·{" "}
+                    <strong className="font-medium text-verde">Salida (check-out):</strong> hasta
+                    las {formatoHora(config.horaCheckout)}
+                  </span>
+                </p>
                 {cotizacion && !cotizacion.ok && (
                   <Aviso>{mensajeError(cotizacion, config.maxHuespedes)}</Aviso>
                 )}
@@ -544,6 +672,19 @@ export function FlujoReserva({
               <div>
                 {tituloPaso("¿Cuántas personas vienen?")}
                 <p className="mt-2">De 1 a {config.maxHuespedes} personas, de cualquier edad.</p>
+                <p className="mt-4 flex max-w-[65ch] items-start gap-3 rounded-card border border-miel bg-blanco p-4 text-small">
+                  <PawPrint
+                    size={20}
+                    strokeWidth={1.5}
+                    className="shrink-0 text-verde"
+                    aria-hidden
+                  />
+                  <span>
+                    <strong className="font-medium text-verde">Lauburu no admite mascotas.</strong>{" "}
+                    Si viajas con la tuya, te recomendamos dejarla al cuidado de alguien de
+                    confianza para que disfrutes tu estadía con tranquilidad.
+                  </span>
+                </p>
 
                 <div className="mt-6 flex items-center gap-4">
                   <button
@@ -592,7 +733,72 @@ export function FlujoReserva({
                     </>
                   ) : null}
                   .
+                  {config.maxAdicionales > 0 && !grupoCompleto && (
+                    <>
+                      {" "}
+                      ¿Son más de {config.maxHuespedes}? Al llegar a {config.maxHuespedes} personas
+                      puedes sumar acompañantes adicionales.
+                    </>
+                  )}
                 </p>
+
+                {grupoCompleto && (
+                  <fieldset className="mt-6 rounded-card border border-niebla bg-blanco p-5 md:p-6">
+                    <legend className="px-2 font-serif text-h3 text-verde">
+                      ¿Vienen más personas?
+                    </legend>
+                    <p className="text-small">
+                      Además de las {config.maxHuespedes} personas puedes sumar hasta{" "}
+                      {config.maxAdicionales} acompañantes, contando a los menores de 4 años.{" "}
+                      {lugaresLibres === 0
+                        ? "Ya no quedan lugares."
+                        : `${lugaresLibres === 1 ? "Queda 1 lugar" : `Quedan ${lugaresLibres} lugares`}.`}
+                    </p>
+                    <ul className="mt-4 divide-y divide-niebla">
+                      {(
+                        [
+                          {
+                            tipo: "adultos",
+                            titulo: "Adultos",
+                            precio: (
+                              <>
+                                <Precio cop={config.precioAdicionalAdulto} trm={trmValor} /> por
+                                noche, con desayuno
+                              </>
+                            ),
+                          },
+                          {
+                            tipo: "ninos",
+                            titulo: "Niños de 4 a 11 años",
+                            precio: (
+                              <>
+                                <Precio cop={config.precioAdicionalNino} trm={trmValor} /> por noche
+                              </>
+                            ),
+                          },
+                          { tipo: "menores", titulo: "Menores de 4 años", precio: "Gratis" },
+                        ] as const
+                      ).map(({ tipo, titulo, precio }) => (
+                        <li
+                          key={tipo}
+                          className="flex flex-wrap items-center justify-between gap-4 py-3"
+                        >
+                          <span>
+                            <span className="block font-medium text-verde">{titulo}</span>
+                            <span className="block text-small">{precio}</span>
+                          </span>
+                          <Contador
+                            etiqueta={`${titulo} adicionales`}
+                            valor={adicionales[tipo]}
+                            min={0}
+                            max={adicionales[tipo] + lugaresLibres}
+                            onCambio={(v) => cambiarAdicional(tipo, v)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </fieldset>
+                )}
 
                 <div
                   className="mt-6 rounded-card border border-niebla bg-blanco p-5 md:p-6"
@@ -666,7 +872,7 @@ export function FlujoReserva({
                       className={claseCampo(!!err("tipoDocumento"))}
                     >
                       <option value="">Elige una opción</option>
-                      {TIPOS_DOCUMENTO.map(([valor, texto]) => (
+                      {Object.entries(tiposDocumento).map(([valor, texto]) => (
                         <option key={valor} value={valor}>
                           {texto}
                         </option>
@@ -869,57 +1075,27 @@ export function FlujoReserva({
                   </p>
                 )}
 
-                <fieldset className="mt-6">
-                  <legend className="font-serif text-h3 text-verde">¿Cómo quieres pagar?</legend>
-                  <div className="mt-4 space-y-3">
-                    {PASARELAS.map((p) => (
-                      <label
-                        key={p.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-card border bg-blanco p-4 transition-colors duration-200 ${
-                          pasarela === p.id
-                            ? "border-verde ring-2 ring-verde/20"
-                            : "border-niebla hover:border-verde"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="pasarela"
-                          value={p.id}
-                          checked={pasarela === p.id}
-                          onChange={() => setPasarela(p.id)}
-                          className="mt-1 size-5 shrink-0 accent-verde"
-                        />
-                        <span>
-                          <span className="block font-medium text-verde">{p.nombre}</span>
-                          <span className="block text-small">{p.detalle}</span>
-                          {p.id === "paypal" && trmValor && (
-                            <span className="mt-1 block text-small">
-                              Cobro aproximado: {formatoPrecio(cot.total, "USD", trmValor)}. El
-                              valor final se calcula con la TRM del día del pago.
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
+                <MedioPaypal totalCop={cot.total} trm={trmValor} />
+                {aviso && <Aviso>{aviso}</Aviso>}
 
-                {/* TODO(tarea pasarelas): integrar Wompi, Bold y PayPal según su documentación oficial. */}
                 <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <button type="button" onClick={() => irA(3)} className={claseBoton("secundario")}>
                     <ArrowLeft size={20} strokeWidth={1.5} aria-hidden /> Volver a tus datos
                   </button>
-                  <button
-                    type="button"
-                    disabled
-                    aria-describedby="pago-pendiente"
-                    className={claseBoton("primario")}
-                  >
-                    Pagar {formatoPrecio(cot.total, moneda, trmValor)}
-                  </button>
+                  {paypal && !holdVencido && (
+                    <BotonPaypal
+                      paypal={paypal}
+                      iniciar={() => iniciarPagoReserva(reserva.codigo)}
+                      capturar={capturarPagoReserva}
+                      alAprobar={() => router.push(`/reservas/confirmacion/${reserva.codigo}`)}
+                      alError={setAviso}
+                    />
+                  )}
                 </div>
-                <p id="pago-pendiente" className="mt-4 max-w-[65ch] text-small">
-                  El pago en línea estará disponible muy pronto. Mientras tanto, escríbenos por{" "}
+                <p className="mt-4 max-w-[65ch] text-small">
+                  {paypal
+                    ? "¿Prefieres pagar en pesos colombianos? Escríbenos por "
+                    : "El pago en línea no está disponible en este momento. Escríbenos por "}
                   <a
                     href={enlaceWhatsApp(
                       `Hola, quiero pagar mi reserva ${reserva.codigo} en Lauburu Glamping`,
@@ -943,6 +1119,7 @@ export function FlujoReserva({
               llegada={llegada}
               salida={salida}
               huespedes={huespedes}
+              adicionales={adicionales}
               cot={cot}
               trm={trm}
               conDesglose={paso === 1}

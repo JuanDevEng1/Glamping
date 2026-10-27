@@ -5,6 +5,7 @@ import {
   date,
   integer,
   jsonb,
+  numeric,
   pgTable,
   serial,
   text,
@@ -20,14 +21,26 @@ import type { Noche } from "./precios";
 // Esquema (PLAN_DESARROLLO.md §3). Montos en COP como enteros.
 // ---------------------------------------------------------------------------
 
-/** Configuración general del glamping. Una sola fila (id = 1), editable desde el panel. */
+/** Configuración general del glamping. Una sola fila (id = 1); se edita con SQL (no hay panel). */
 export const configuracion = pgTable(
   "configuracion",
   {
     id: integer().primaryKey().default(1),
+    /** Entre semana (domingo a jueves). */
     precioBase: integer().notNull(),
+    /** Fin de semana y puentes. */
     precioAlto: integer().notNull(),
+    /** Temporada alta: noches dentro de una fila de `temporadas` sin precio propio. */
+    precioTemporada: integer().notNull().default(560_000),
+    /** Fecha especial: noches marcadas como `especial` en `ajustes_fecha` sin precio propio. */
+    precioFechaEspecial: integer().notNull().default(650_000),
     precioPersonaExtra: integer().notNull(),
+    /** Acompañantes por encima de maxHuespedes. Los menores de 4 años no pagan pero cuentan. */
+    maxAdicionales: integer().notNull().default(4),
+    /** Por noche, con desayuno. */
+    precioAdicionalAdulto: integer().notNull().default(90_000),
+    /** Por noche, niños de 4 a 11 años. */
+    precioAdicionalNino: integer().notNull().default(60_000),
     maxHuespedes: integer().notNull().default(6),
     huespedesIncluidos: integer().notNull().default(2),
     horaCheckin: time().notNull().default("15:00"),
@@ -38,6 +51,9 @@ export const configuracion = pgTable(
     minutosHold: integer().notNull().default(20),
     /** Si la noche del propio festivo (ej. lunes → martes) se cobra con tarifa alta. */
     nocheFestivoAlta: boolean().notNull().default(false),
+    /** Última TRM conocida (COP por 1 USD): respaldo si datos.gov.co no responde. */
+    trmValor: numeric({ precision: 12, scale: 2 }),
+    trmFecha: date({ mode: "string" }),
   },
   (t) => [
     check("configuracion_fila_unica", sql`${t.id} = 1`),
@@ -45,10 +61,18 @@ export const configuracion = pgTable(
       "configuracion_montos_positivos",
       sql`${t.precioBase} > 0 and ${t.precioAlto} > 0 and ${t.precioPersonaExtra} >= 0`,
     ),
+    check(
+      "configuracion_tarifas_positivas",
+      sql`${t.precioTemporada} > 0 and ${t.precioFechaEspecial} > 0`,
+    ),
+    check(
+      "configuracion_adicionales",
+      sql`${t.maxAdicionales} >= 0 and ${t.precioAdicionalAdulto} >= 0 and ${t.precioAdicionalNino} >= 0`,
+    ),
   ],
 );
 
-/** Temporadas con tarifa propia. Fechas de noches, ambas inclusive. */
+/** Temporada alta. Fechas de noches, ambas inclusive. Sin precio propio usa precioTemporada. */
 export const temporadas = pgTable(
   "temporadas",
   {
@@ -56,13 +80,13 @@ export const temporadas = pgTable(
     nombre: text().notNull(),
     fechaInicio: date({ mode: "string" }).notNull(),
     fechaFin: date({ mode: "string" }).notNull(),
-    precioNoche: integer().notNull(),
+    precioNoche: integer(),
     precioPersonaExtra: integer(),
     minimoNoches: integer().notNull().default(1),
   },
   (t) => [
     check("temporadas_rango", sql`${t.fechaFin} >= ${t.fechaInicio}`),
-    check("temporadas_precio", sql`${t.precioNoche} > 0`),
+    check("temporadas_precio", sql`${t.precioNoche} is null or ${t.precioNoche} > 0`),
   ],
 );
 
@@ -71,10 +95,14 @@ export const festivos = pgTable("festivos", {
   nombre: text().notNull(),
 });
 
-/** Precio especial o bloqueo de una noche concreta. */
+/**
+ * Ajuste de una noche concreta: fecha especial (precioFechaEspecial), precio propio o bloqueo.
+ * Un precio propio gana sobre `especial`.
+ */
 export const ajustesFecha = pgTable("ajustes_fecha", {
   fecha: date({ mode: "string" }).primaryKey(),
   precio: integer(),
+  especial: boolean().notNull().default(false),
   bloqueada: boolean().notNull().default(false),
   motivo: text(),
 });
@@ -92,7 +120,13 @@ export const reservas = pgTable(
     codigo: text().notNull().unique(),
     fechaLlegada: date({ mode: "string" }).notNull(),
     fechaSalida: date({ mode: "string" }).notNull(),
+    /** Grupo base (1 a 6). Los acompañantes por encima de 6 van en las columnas *Adicionales. */
     huespedes: integer().notNull(),
+    adultosAdicionales: integer().notNull().default(0),
+    /** De 4 a 11 años. */
+    ninosAdicionales: integer().notNull().default(0),
+    /** Menores de 4 años (no pagan). */
+    menoresAdicionales: integer().notNull().default(0),
     estado: text({ enum: ESTADOS_RESERVA }).notNull().default("pendiente"),
     totalCop: integer().notNull(),
     desglose: jsonb().$type<Noche[]>().notNull(),
@@ -108,11 +142,17 @@ export const reservas = pgTable(
     expiraEn: timestamp({ withTimezone: true }).notNull(),
     terminosVersion: text().notNull(),
     aceptaMarketing: boolean().notNull().default(false),
+    /** Cuándo se envió al admin el documento del titular. El archivo no se guarda. */
+    documentoRecibidoEn: timestamp({ withTimezone: true }),
     creadaEn: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("reservas_fechas", sql`${t.fechaSalida} > ${t.fechaLlegada}`),
     check("reservas_huespedes", sql`${t.huespedes} between 1 and 6`),
+    check(
+      "reservas_adicionales",
+      sql`${t.adultosAdicionales} >= 0 and ${t.ninosAdicionales} >= 0 and ${t.menoresAdicionales} >= 0`,
+    ),
     check(
       "reservas_estado",
       sql`${t.estado} in ('pendiente', 'confirmada', 'cancelada', 'expirada')`,
@@ -238,6 +278,68 @@ export const itemsPedido = pgTable(
   (t) => [check("items_pedido_cantidad", sql`${t.cantidad} >= 1`)],
 );
 
+// ---------------------------------------------------------------------------
+// Pagos (tarea pasarelas). Comunes a todas las pasarelas.
+// ---------------------------------------------------------------------------
+
+export const PASARELAS = ["paypal", "wompi", "bold"] as const;
+export const ESTADOS_PAGO = [
+  "creado",
+  "capturado",
+  "aprobado",
+  "rechazado",
+  "reembolsado",
+  "requiere_reembolso",
+] as const;
+
+/**
+ * Un intento de cobro de una reserva o de un pedido. Guarda el monto cobrado en la
+ * moneda de la pasarela y la TRM usada (PayPal cobra en USD).
+ */
+export const pagos = pgTable(
+  "pagos",
+  {
+    id: serial().primaryKey(),
+    pasarela: text({ enum: PASARELAS }).notNull(),
+    reservaId: integer().references(() => reservas.id),
+    pedidoId: integer().references(() => pedidos.id),
+    /** Id de la orden o transacción en la pasarela. */
+    idExterno: text().notNull(),
+    idCaptura: text(),
+    estado: text({ enum: ESTADOS_PAGO }).notNull().default("creado"),
+    montoCop: integer().notNull(),
+    moneda: text({ enum: ["COP", "USD"] }).notNull(),
+    /** Monto en la unidad mínima de `moneda` (centavos para USD). */
+    montoMoneda: integer().notNull(),
+    trm: numeric({ precision: 12, scale: 2 }),
+    creadoEn: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    actualizadoEn: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("pagos_id_externo").on(t.pasarela, t.idExterno),
+    check("pagos_destino", sql`(${t.reservaId} is null) <> (${t.pedidoId} is null)`),
+    check(
+      "pagos_estado",
+      sql`${t.estado} in ('creado', 'capturado', 'aprobado', 'rechazado', 'reembolsado', 'requiere_reembolso')`,
+    ),
+    check("pagos_montos", sql`${t.montoCop} > 0 and ${t.montoMoneda} > 0`),
+  ],
+);
+
+/** Eventos de webhook ya procesados: idempotencia por id de evento. */
+export const eventosPasarela = pgTable(
+  "eventos_pasarela",
+  {
+    id: serial().primaryKey(),
+    pasarela: text({ enum: PASARELAS }).notNull(),
+    idEvento: text().notNull(),
+    tipo: text().notNull(),
+    payload: jsonb().notNull(),
+    recibidoEn: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("eventos_pasarela_unico").on(t.pasarela, t.idEvento)],
+);
+
 export const schema = {
   configuracion,
   temporadas,
@@ -249,6 +351,8 @@ export const schema = {
   cuposServicio,
   pedidos,
   itemsPedido,
+  pagos,
+  eventosPasarela,
 };
 
 // ---------------------------------------------------------------------------

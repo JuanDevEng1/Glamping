@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { obtenerConfiguracion } from "@lauburu/backend/db";
-import { hoyEnBogota, obtenerTrm } from "@lauburu/backend/moneda";
+import { hoyEnBogota, trmParaCobro } from "@lauburu/backend/moneda";
+import { clientePaypal } from "@lauburu/backend/paypal";
+import { TIPOS_DOCUMENTO } from "@lauburu/backend/reservas";
 import { FlujoReserva } from "@/components/reserva/FlujoReserva";
 import { Proximamente } from "@/components/ui";
 
@@ -11,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function Reservas() {
-  const [config, trm] = await Promise.all([obtenerConfiguracion(), obtenerTrm()]);
+  const [config, trm] = await Promise.all([obtenerConfiguracion(), trmParaCobro()]);
 
   if (!config) {
     return (
@@ -29,12 +31,17 @@ export default async function Reservas() {
       config={{
         maxHuespedes: config.maxHuespedes,
         huespedesIncluidos: config.huespedesIncluidos,
+        maxAdicionales: config.maxAdicionales,
+        precioAdicionalAdulto: config.precioAdicionalAdulto,
+        precioAdicionalNino: config.precioAdicionalNino,
         horaCheckin: config.horaCheckin,
         horaCheckout: config.horaCheckout,
         minutosHold: config.minutosHold,
       }}
+      tiposDocumento={TIPOS_DOCUMENTO}
       trm={trm}
       hoy={hoyEnBogota()}
+      paypal={trm ? clientePaypal() : null}
     />
   );
 }

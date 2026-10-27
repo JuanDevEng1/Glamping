@@ -9,9 +9,14 @@
 export type ConfigTarifas = {
   precioBase: number;
   precioAlto: number;
+  precioTemporada: number;
+  precioFechaEspecial: number;
   precioPersonaExtra: number;
   maxHuespedes: number;
   huespedesIncluidos: number;
+  maxAdicionales: number;
+  precioAdicionalAdulto: number;
+  precioAdicionalNino: number;
   minimoNochesPuente: number;
   nocheFestivoAlta: boolean;
 };
@@ -20,12 +25,19 @@ export type Temporada = {
   nombre: string;
   fechaInicio: string; // inclusive
   fechaFin: string; // inclusive
-  precioNoche: number;
+  /** Null: usa config.precioTemporada. */
+  precioNoche: number | null;
   precioPersonaExtra: number | null;
   minimoNoches: number;
 };
 
-export type AjusteFecha = { fecha: string; precio: number | null; bloqueada: boolean };
+export type AjusteFecha = {
+  fecha: string;
+  precio: number | null;
+  /** Fecha especial: sin precio propio usa config.precioFechaEspecial. */
+  especial: boolean;
+  bloqueada: boolean;
+};
 
 export type DatosTarifas = {
   config: ConfigTarifas;
@@ -47,7 +59,41 @@ export type Noche = {
   bloqueada: boolean;
 };
 
-export type Estadia = { llegada: string; salida: string; huespedes: number };
+/** Acompañantes por encima de maxHuespedes, por edad. */
+export type Adicionales = { adultos: number; ninos: number; menores: number };
+
+export const SIN_ADICIONALES: Adicionales = { adultos: 0, ninos: 0, menores: 0 };
+
+export function totalAdicionales(a: Adicionales) {
+  return a.adultos + a.ninos + a.menores;
+}
+
+/** "6 personas" o "8 personas (6 + 2 adicionales)". */
+export function textoPersonas(huespedes: number, adicionales: Adicionales = SIN_ADICIONALES) {
+  const extra = totalAdicionales(adicionales);
+  const total = huespedes + extra;
+  const base = `${total} ${total === 1 ? "persona" : "personas"}`;
+  if (extra === 0) return base;
+  return `${base} (${huespedes} + ${extra} ${extra === 1 ? "adicional" : "adicionales"})`;
+}
+
+/** Una línea por tipo de adicional, ej. ["2 adultos", "1 niño de 4 a 11 años"]. */
+export function detalleAdicionales(a: Adicionales) {
+  return [
+    a.adultos > 0 && `${a.adultos} ${a.adultos === 1 ? "adulto" : "adultos"}`,
+    a.ninos > 0 && `${a.ninos} ${a.ninos === 1 ? "niño" : "niños"} de 4 a 11 años`,
+    a.menores > 0 && `${a.menores} ${a.menores === 1 ? "menor" : "menores"} de 4 años`,
+  ].filter((t): t is string => !!t);
+}
+
+export type Estadia = {
+  llegada: string;
+  salida: string;
+  /** Grupo base, de 1 a maxHuespedes. */
+  huespedes: number;
+  /** Solo con el grupo base completo (huespedes = maxHuespedes). */
+  adicionales?: Adicionales;
+};
 
 export type Cotizacion = {
   ok: true;
@@ -55,13 +101,24 @@ export type Cotizacion = {
   personasExtra: number;
   subtotal: number;
   extraPersonas: number;
+  adicionales: Adicionales;
+  /** Por noche; los precios de adicionales no cambian con la temporada. */
+  precioAdicionalAdulto: number;
+  precioAdicionalNino: number;
+  /** Adultos y niños adicionales por todas las noches. */
+  extraAdicionales: number;
   total: number;
   moneda: "COP";
 };
 
 export type ErrorCotizacion = {
   ok: false;
-  error: "fechas_invalidas" | "huespedes_invalidos" | "minimo_noches" | "no_disponible";
+  error:
+    | "fechas_invalidas"
+    | "huespedes_invalidos"
+    | "adicionales_invalidos"
+    | "minimo_noches"
+    | "no_disponible";
   minimo?: number;
   fecha?: string;
 };
@@ -128,12 +185,12 @@ export function clasificarNoche(fecha: string, datos: DatosTarifas): Noche {
   let precio: number;
   const dia = diaSemana(fecha);
 
-  if (ajuste && ajuste.precio !== null) {
+  if (ajuste && (ajuste.precio !== null || ajuste.especial)) {
     tipo = "ajuste";
-    precio = ajuste.precio;
+    precio = ajuste.precio ?? config.precioFechaEspecial;
   } else if (temporada) {
     tipo = "temporada";
-    precio = temporada.precioNoche;
+    precio = temporada.precioNoche ?? config.precioTemporada;
   } else if (dia === 5 || dia === 6) {
     tipo = "alta";
     precio = config.precioAlto;
@@ -160,7 +217,7 @@ export function cotizar(
   datos: DatosTarifas,
   hoy: string,
 ): Cotizacion | ErrorCotizacion {
-  const { llegada, salida, huespedes } = estadia;
+  const { llegada, salida, huespedes, adicionales = SIN_ADICIONALES } = estadia;
   const { config } = datos;
 
   if (!esFechaValida(llegada) || !esFechaValida(salida) || llegada < hoy) {
@@ -171,6 +228,15 @@ export function cotizar(
 
   if (!Number.isInteger(huespedes) || huespedes < 1 || huespedes > config.maxHuespedes) {
     return { ok: false, error: "huespedes_invalidos" };
+  }
+  const cantidades = [adicionales.adultos, adicionales.ninos, adicionales.menores];
+  const adicionalesTotal = totalAdicionales(adicionales);
+  if (
+    cantidades.some((c) => !Number.isInteger(c) || c < 0) ||
+    adicionalesTotal > config.maxAdicionales ||
+    (adicionalesTotal > 0 && huespedes < config.maxHuespedes)
+  ) {
+    return { ok: false, error: "adicionales_invalidos" };
   }
 
   const noches: Noche[] = [];
@@ -194,6 +260,10 @@ export function cotizar(
   const personasExtra = Math.max(0, huespedes - config.huespedesIncluidos);
   const subtotal = noches.reduce((s, n) => s + n.precio, 0);
   const extraPersonas = noches.reduce((s, n) => s + personasExtra * n.precioPersonaExtra, 0);
+  const extraAdicionales =
+    cantidad *
+    (adicionales.adultos * config.precioAdicionalAdulto +
+      adicionales.ninos * config.precioAdicionalNino);
 
   return {
     ok: true,
@@ -201,7 +271,11 @@ export function cotizar(
     personasExtra,
     subtotal,
     extraPersonas,
-    total: subtotal + extraPersonas,
+    adicionales,
+    precioAdicionalAdulto: config.precioAdicionalAdulto,
+    precioAdicionalNino: config.precioAdicionalNino,
+    extraAdicionales,
+    total: subtotal + extraPersonas + extraAdicionales,
     moneda: "COP",
   };
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "reservas" ADD COLUMN "documento_recibido_en" timestamp with time zone;

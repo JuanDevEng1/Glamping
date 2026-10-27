@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, MapPin, Route, TriangleAlert, Users } from "lucide-react";
 import { obtenerConfiguracion } from "@lauburu/backend/db";
-import { obtenerTrm } from "@lauburu/backend/moneda";
+import { trmParaCobro } from "@lauburu/backend/moneda";
 import { Container } from "@/components/Container";
 import { NotaMoneda, Precio } from "@/components/Moneda";
 import {
@@ -82,7 +82,7 @@ const respuestaPorWhatsApp = (
 // ---------------------------------------------------------------------------
 
 export default async function Nosotros() {
-  const [config, trm] = await Promise.all([obtenerConfiguracion(), obtenerTrm()]);
+  const [config, trm] = await Promise.all([obtenerConfiguracion(), trmParaCobro()]);
   const trmValor = trm?.valor ?? null;
   const incluidas = config?.huespedesIncluidos ?? 2;
   const maximo = config?.maxHuespedes ?? 6;
@@ -99,9 +99,12 @@ export default async function Nosotros() {
         <p>Te confirmamos los horarios de llegada y salida al hacer tu reserva.</p>
       ),
     },
-    // TODO(cliente): responder parqueadero, mascotas y alimentos.
+    // TODO(cliente): responder parqueadero y alimentos.
     { pregunta: "¿Hay parqueadero?", respuesta: respuestaPorWhatsApp },
-    { pregunta: "¿Puedo llevar a mi mascota?", respuesta: respuestaPorWhatsApp },
+    {
+      pregunta: "¿Puedo llevar a mi mascota?",
+      respuesta: <p>No, en Lauburu no se admiten mascotas.</p>,
+    },
     {
       pregunta: "¿Qué clima hace y qué ropa debo llevar?",
       // TODO(cliente): confirmar.
@@ -260,10 +263,25 @@ export default async function Nosotros() {
               "un valor adicional"
             )}{" "}
             por persona y por noche.
+            {config && config.maxAdicionales > 0 && (
+              <>
+                {" "}
+                Si son más de {maximo}, puedes sumar hasta {config.maxAdicionales} acompañantes:
+                adultos a{" "}
+                <strong className="font-medium text-verde">
+                  <Precio cop={config.precioAdicionalAdulto} trm={trmValor} />
+                </strong>{" "}
+                por noche con desayuno, niños de 4 a 11 años a{" "}
+                <strong className="font-medium text-verde">
+                  <Precio cop={config.precioAdicionalNino} trm={trmValor} />
+                </strong>{" "}
+                por noche y menores de 4 años gratis.
+              </>
+            )}
           </p>
         </div>
 
-        <div className="mt-4 grid gap-4 md:mt-6 md:grid-cols-3 md:gap-6">
+        <div className="mt-4 grid gap-4 md:mt-6 md:grid-cols-2 md:gap-6 lg:grid-cols-4">
           <Tarjeta className="flex flex-col justify-between gap-6">
             <div>
               <p className="text-overline font-medium text-terracota-oscuro">DOMINGO A JUEVES</p>
@@ -284,7 +302,7 @@ export default async function Nosotros() {
               <p className="text-overline font-medium text-terracota-oscuro">
                 VIERNES, SÁBADO Y PUENTES
               </p>
-              <h3 className="mt-2 font-serif text-h3 text-verde">Fines de semana y puentes</h3>
+              <h3 className="mt-2 font-serif text-h3 text-verde">Fin de semana</h3>
               <p className="mt-2 text-small">
                 Noches de viernes y sábado, y la noche anterior a un festivo.
               </p>
@@ -298,15 +316,34 @@ export default async function Nosotros() {
           </Tarjeta>
           <Tarjeta className="flex flex-col justify-between gap-6">
             <div>
-              <p className="text-overline font-medium text-terracota-oscuro">FECHAS ESPECIALES</p>
+              <p className="text-overline font-medium text-terracota-oscuro">VACACIONES</p>
               <h3 className="mt-2 font-serif text-h3 text-verde">Temporada alta</h3>
               <p className="mt-2 text-small">
                 Diciembre y enero, Semana Santa y vacaciones de mitad de año.
               </p>
             </div>
-            <p className="border-t border-niebla pt-4 text-small">
-              Consulta la tarifa de temporada en el calendario.
-            </p>
+            {config && (
+              <p className="border-t border-niebla pt-4 font-bold text-verde">
+                <Precio cop={config.precioTemporada} trm={trmValor} />
+                <span className="font-normal text-cafe"> / noche</span>
+              </p>
+            )}
+          </Tarjeta>
+          <Tarjeta className="flex flex-col justify-between gap-6">
+            <div>
+              <p className="text-overline font-medium text-terracota-oscuro">NOCHES PUNTUALES</p>
+              <h3 className="mt-2 font-serif text-h3 text-verde">Fecha especial</h3>
+              <p className="mt-2 text-small">
+                Noches de alta demanda, como celebraciones y fiestas de la región. Las verás
+                marcadas en el calendario.
+              </p>
+            </div>
+            {config && (
+              <p className="border-t border-niebla pt-4 font-bold text-verde">
+                <Precio cop={config.precioFechaEspecial} trm={trmValor} />
+                <span className="font-normal text-cafe"> / noche</span>
+              </p>
+            )}
           </Tarjeta>
         </div>
 

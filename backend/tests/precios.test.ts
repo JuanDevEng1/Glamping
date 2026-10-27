@@ -19,9 +19,14 @@ const HOY = "2026-10-21";
 const config: ConfigTarifas = {
   precioBase: 280_000,
   precioAlto: 350_000,
+  precioTemporada: 560_000,
+  precioFechaEspecial: 650_000,
   precioPersonaExtra: 60_000,
   maxHuespedes: 6,
   huespedesIncluidos: 2,
+  maxAdicionales: 4,
+  precioAdicionalAdulto: 90_000,
+  precioAdicionalNino: 60_000,
   minimoNochesPuente: 1,
   nocheFestivoAlta: false,
 };
@@ -101,7 +106,7 @@ describe("clasificarNoche", () => {
   it("un ajuste de precio gana sobre la temporada", () => {
     const d = datos({
       ajustes: new Map([
-        ["2026-12-24", { fecha: "2026-12-24", precio: 600_000, bloqueada: false }],
+        ["2026-12-24", { fecha: "2026-12-24", precio: 600_000, especial: false, bloqueada: false }],
       ]),
     });
     expect(clasificarNoche("2026-12-24", d)).toMatchObject({ tipo: "ajuste", precio: 600_000 });
@@ -109,7 +114,9 @@ describe("clasificarNoche", () => {
 
   it("una fecha bloqueada queda marcada como bloqueada", () => {
     const d = datos({
-      ajustes: new Map([["2026-11-20", { fecha: "2026-11-20", precio: null, bloqueada: true }]]),
+      ajustes: new Map([
+        ["2026-11-20", { fecha: "2026-11-20", precio: null, especial: false, bloqueada: true }],
+      ]),
     });
     expect(clasificarNoche("2026-11-20", d)).toMatchObject({ bloqueada: true });
   });
@@ -177,7 +184,7 @@ describe("cotizar", () => {
   it("ajuste de precio dentro de la temporada", () => {
     const d = datos({
       ajustes: new Map([
-        ["2026-12-24", { fecha: "2026-12-24", precio: 600_000, bloqueada: false }],
+        ["2026-12-24", { fecha: "2026-12-24", precio: 600_000, especial: false, bloqueada: false }],
       ]),
     });
     expect(cotizar(estadia("2026-12-23", "2026-12-25"), d, HOY)).toMatchObject({
@@ -267,7 +274,9 @@ describe("cotizar", () => {
 
   it("no se puede cruzar una fecha bloqueada", () => {
     const d = datos({
-      ajustes: new Map([["2026-11-20", { fecha: "2026-11-20", precio: null, bloqueada: true }]]),
+      ajustes: new Map([
+        ["2026-11-20", { fecha: "2026-11-20", precio: null, especial: false, bloqueada: true }],
+      ]),
     });
     expect(cotizar(estadia("2026-11-19", "2026-11-21"), d, HOY)).toMatchObject({
       ok: false,
@@ -294,6 +303,84 @@ describe("cotizar", () => {
   });
 });
 
+describe("temporada alta y fecha especial", () => {
+  it("una temporada sin precio propio usa precioTemporada", () => {
+    const d = datos({ temporadas: [{ ...finDeAnio, precioNoche: null }] });
+    expect(clasificarNoche("2026-12-18", d)).toMatchObject({ tipo: "temporada", precio: 560_000 });
+  });
+
+  it("una fecha especial sin precio propio usa precioFechaEspecial y gana sobre la temporada", () => {
+    const d = datos({
+      ajustes: new Map([
+        ["2026-12-24", { fecha: "2026-12-24", precio: null, especial: true, bloqueada: false }],
+      ]),
+    });
+    expect(clasificarNoche("2026-12-24", d)).toMatchObject({ tipo: "ajuste", precio: 650_000 });
+  });
+
+  it("un ajuste sin precio ni marca de especial no cambia la tarifa", () => {
+    const d = datos({
+      ajustes: new Map([
+        ["2026-11-10", { fecha: "2026-11-10", precio: null, especial: false, bloqueada: false }],
+      ]),
+    });
+    expect(clasificarNoche("2026-11-10", d)).toMatchObject({ tipo: "base", precio: 280_000 });
+  });
+});
+
+describe("acompañantes adicionales", () => {
+  const con = (adultos: number, ninos: number, menores: number, huespedes = 6) => ({
+    ...estadia("2026-11-10", "2026-11-12", huespedes),
+    adicionales: { adultos, ninos, menores },
+  });
+
+  it("6 personas + 1 adulto, 1 niño y 1 menor por 2 noches", () => {
+    const r = cotizar(con(1, 1, 1), datos(), HOY);
+    // 2 noches × 280 000 + 4 extra × 60 000 × 2 + (90 000 + 60 000) × 2; el menor no paga.
+    expect(r).toMatchObject({
+      ok: true,
+      subtotal: 560_000,
+      extraPersonas: 480_000,
+      extraAdicionales: 300_000,
+      total: 1_340_000,
+      adicionales: { adultos: 1, ninos: 1, menores: 1 },
+    });
+  });
+
+  it("el precio de los adicionales no cambia en temporada", () => {
+    const r = cotizar(
+      { ...con(2, 0, 0), llegada: "2026-12-16", salida: "2026-12-18" },
+      datos(),
+      HOY,
+    );
+    expect(r).toMatchObject({ ok: true, extraAdicionales: 2 * 2 * 90_000 });
+  });
+
+  it("los menores de 4 años cuentan para el máximo", () => {
+    expect(cotizar(con(2, 0, 2), datos(), HOY)).toMatchObject({ ok: true });
+    expect(cotizar(con(2, 1, 2), datos(), HOY)).toEqual({
+      ok: false,
+      error: "adicionales_invalidos",
+    });
+  });
+
+  it("solo se aceptan con el grupo base completo", () => {
+    expect(cotizar(con(1, 0, 0, 5), datos(), HOY)).toEqual({
+      ok: false,
+      error: "adicionales_invalidos",
+    });
+  });
+
+  it("cantidades negativas o con decimales no se aceptan", () => {
+    expect(cotizar(con(-1, 0, 0), datos(), HOY)).toMatchObject({ error: "adicionales_invalidos" });
+    expect(cotizar(con(1.5, 0, 0), datos(), HOY)).toMatchObject({ error: "adicionales_invalidos" });
+  });
+
+  it("sin adicionales el total no cambia", () => {
+    expect(cotizar(con(0, 0, 0), datos(), HOY)).toMatchObject({ extraAdicionales: 0 });
+  });
+});
+
 describe("calendarioMes", () => {
   it("devuelve todos los días del mes con precio, tipo y estado", () => {
     const dias = calendarioMes("2026-10", datos({ nochesOcupadas: new Set(["2026-10-27"]) }), HOY);
@@ -313,7 +400,9 @@ describe("calendarioMes", () => {
 
   it("marca bloqueados y festivos", () => {
     const d = datos({
-      ajustes: new Map([["2026-11-20", { fecha: "2026-11-20", precio: null, bloqueada: true }]]),
+      ajustes: new Map([
+        ["2026-11-20", { fecha: "2026-11-20", precio: null, especial: false, bloqueada: true }],
+      ]),
     });
     const dias = calendarioMes("2026-11", d, HOY);
     expect(dias).toHaveLength(30);

@@ -26,10 +26,11 @@ await db.insert(festivos).values(filas).onConflictDoNothing();
 console.log(`Festivos: ${filas.length} revisados (los existentes no se modifican).`);
 
 if (process.argv.includes("--ejemplo")) {
-  // Valores ficticios solo para probar el flujo. El glamping define los reales en el panel.
+  // Tarifas del glamping; temporada alta, fecha especial y adicionales usan los valores por
+  // defecto de la tabla (560 000, 650 000, 90 000 y 60 000). Las temporadas son de ejemplo.
   await db
     .insert(configuracion)
-    .values({ precioBase: 280_000, precioAlto: 350_000, precioPersonaExtra: 60_000 })
+    .values({ precioBase: 420_000, precioAlto: 490_000, precioPersonaExtra: 60_000 })
     .onConflictDoNothing();
   const existentes = await db.select({ id: temporadas.id }).from(temporadas).limit(1);
   if (existentes.length === 0) {
@@ -38,7 +39,7 @@ if (process.argv.includes("--ejemplo")) {
         nombre: "Fin de año (ejemplo)",
         fechaInicio: "2026-12-15",
         fechaFin: "2027-01-15",
-        precioNoche: 450_000,
+        precioNoche: null,
         precioPersonaExtra: 80_000,
         minimoNoches: 2,
       },
@@ -46,7 +47,7 @@ if (process.argv.includes("--ejemplo")) {
         nombre: "Semana Santa (ejemplo)",
         fechaInicio: "2027-03-20",
         fechaFin: "2027-03-28",
-        precioNoche: 420_000,
+        precioNoche: null,
         precioPersonaExtra: null,
         minimoNoches: 2,
       },

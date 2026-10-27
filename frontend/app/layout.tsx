@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Lora, Poppins } from "next/font/google";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
-import { obtenerTrm } from "@lauburu/backend/moneda";
+import { trmParaCobro } from "@lauburu/backend/moneda";
 import { MonedaProvider } from "@/components/Moneda";
 import { CarritoProvider } from "@/components/servicios/Carrito";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const trm = await obtenerTrm();
+  const trm = await trmParaCobro();
   return (
     <html lang="es" className={`${lora.variable} ${poppins.variable}`}>
       <body className="flex min-h-svh flex-col font-sans text-body antialiased">

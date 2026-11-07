@@ -8,6 +8,7 @@ import { detalleAdicionales, diasEntre, textoPersonas } from "@lauburu/backend/p
 import { Container } from "@/components/Container";
 import {
   CopiarCodigo,
+  DepositoGarantia,
   RefrescoAutomatico,
   SubirDocumento,
 } from "@/components/reserva/Confirmacion";
@@ -107,11 +108,15 @@ export default async function ConfirmacionReserva({
               <SubirDocumento codigo={reserva.codigo} recibido={reserva.documentoRecibido} />
             )}
 
+            {confirmada && reserva.deposito && (
+              <DepositoGarantia deposito={reserva.deposito} />
+            )}
+
             {/* Resumen */}
             <Tarjeta>
               <h2 className="font-serif text-h3 text-verde">Resumen de la reserva</h2>
               <div className="mt-4 grid gap-6 sm:grid-cols-3">
-                <FotoPendiente descripcion="Vista del glamping" className="aspect-[3/2]" />
+                <FotoPendiente descripcion="Vista del glamping" className="aspect-3/2" />
                 <dl className="grid gap-4 text-small sm:col-span-2 sm:grid-cols-2">
                   <div>
                     <dt className="font-medium text-verde">Fechas</dt>

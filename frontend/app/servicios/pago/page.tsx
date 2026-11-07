@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { obtenerConfiguracion } from "@lauburu/backend/db";
 import { trmParaCobro } from "@lauburu/backend/moneda";
+import { clienteOpenpay } from "@lauburu/backend/openpay";
 import { clientePaypal } from "@lauburu/backend/paypal";
 import { Container } from "@/components/Container";
 import { Checkout } from "@/components/servicios/Checkout";
@@ -25,6 +26,7 @@ export default async function PagoServicios() {
           <Checkout
             minutosHold={config?.minutosHold ?? 20}
             paypal={config && trm ? clientePaypal() : null}
+            openpay={config ? clienteOpenpay() : null}
           />
         </div>
       </Container>

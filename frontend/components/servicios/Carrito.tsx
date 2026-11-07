@@ -9,7 +9,7 @@ import type { EstadiaVinculada, ValidacionCarrito } from "@lauburu/backend/pedid
 import type { UnidadPrecio } from "@lauburu/backend/servicios";
 import { validarCarritoAccion } from "@/app/servicios/acciones";
 import { Precio } from "@/components/Moneda";
-import { FotoPendiente, claseBoton } from "@/components/ui";
+import { Foto, claseBoton } from "@/components/ui";
 import {
   cantidadTexto,
   cuandoTexto,
@@ -27,7 +27,10 @@ export type ItemGuardado = {
   slug: string;
   nombre: string;
   unidadPrecio: UnidadPrecio;
+  /** Texto alternativo de la foto (o su descripción si aún no hay foto real). */
   foto: string;
+  /** Opcional: los carritos guardados antes de las fotos reales no lo tienen. */
+  fotoSrc?: string;
   fecha: string | null;
   turno: string | null;
   cantidad: number;
@@ -274,7 +277,16 @@ function PanelCarrito() {
                 className={`rounded-card border bg-blanco p-4 ${problema ? "border-terracota-oscuro" : "border-niebla"}`}
               >
                 <div className="flex gap-4">
-                  <FotoPendiente descripcion={item.foto} className="size-20 shrink-0 p-1 md:p-1" />
+                  <Foto
+                    miniatura
+                    // Viene del navegador: solo se aceptan fotos propias del sitio.
+                    foto={{
+                      alt: item.foto,
+                      src: item.fotoSrc?.startsWith("/servicios/") ? item.fotoSrc : undefined,
+                    }}
+                    sizes="80px"
+                    className="size-20 shrink-0 p-1 md:p-1"
+                  />
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/servicios/${item.slug}`}
@@ -313,7 +325,7 @@ function PanelCarrito() {
                       type="button"
                       onClick={() => cambiarCantidad(i, item.cantidad - 1)}
                       disabled={item.cantidad <= 1}
-                      aria-label={`Quitar una ${unidadSingular(item.unidadPrecio)} de ${item.nombre}`}
+                      aria-label={`Quitar 1 ${unidadSingular(item.unidadPrecio)} de ${item.nombre}`}
                       className="inline-flex size-11 items-center justify-center rounded-full text-verde disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Minus size={16} strokeWidth={1.5} />
@@ -325,7 +337,7 @@ function PanelCarrito() {
                       type="button"
                       onClick={() => cambiarCantidad(i, item.cantidad + 1)}
                       disabled={item.cantidad >= item.maxPorPedido}
-                      aria-label={`Agregar una ${unidadSingular(item.unidadPrecio)} a ${item.nombre}`}
+                      aria-label={`Agregar 1 ${unidadSingular(item.unidadPrecio)} a ${item.nombre}`}
                       className="inline-flex size-11 items-center justify-center rounded-full text-verde disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Plus size={16} strokeWidth={1.5} />

@@ -11,7 +11,7 @@ const LIMITES = {
   crear: [10, 600],
   /** Vincular una reserva con código y correo: frena el intento de adivinar códigos. */
   vincular: [10, 900],
-  /** Iniciar o capturar un pago con PayPal. */
+  /** Iniciar o capturar un pago (PayPal u Openpay). */
   pago: [20, 600],
   documento: [5, 3600],
 } as const;
@@ -24,6 +24,19 @@ async function ipCliente() {
     h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "desconocida"
   );
+}
+
+/**
+ * URL pública del sitio, para que el banco devuelva al huésped después de PSE.
+ * SITIO_URL si está; si no, `URL` (la define Netlify); en local, el host de la petición.
+ */
+export async function urlSitio() {
+  const fija = process.env.SITIO_URL ?? process.env.URL;
+  if (fija) return fija.replace(/\/$/, "");
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const protocolo = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${protocolo}://${host}`;
 }
 
 /** Cuenta la petición y dice si `accion` sigue dentro de su límite para esta IP. */

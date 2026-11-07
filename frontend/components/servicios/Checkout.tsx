@@ -1,27 +1,32 @@
 "use client";
 
 // Finalizar compra de servicios: datos del comprador → pedido pendiente (aparta cupos)
-// → PayPal. El webhook confirma el pedido y descuenta el stock.
+// → Openpay (pesos) o PayPal (dólares). El webhook confirma el pedido y descuenta el stock.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, ArrowRight, CircleAlert, Clock } from "lucide-react";
 import type { ValidacionCarrito } from "@lauburu/backend/pedidos";
+import type { ClienteOpenpay } from "@lauburu/backend/openpay";
 import type { ClientePaypal } from "@lauburu/backend/paypal";
 import {
   capturarPagoPedido,
   crearPedidoAccion,
   iniciarPagoPedido,
+  iniciarPsePedido,
   liberarPedidoAccion,
+  pagarTarjetaPedido,
   validarCarritoAccion,
 } from "@/app/servicios/acciones";
 import { Precio, useMoneda } from "@/components/Moneda";
 import { BotonPaypal, MedioPaypal } from "@/components/pago/BotonPaypal";
+import { MedioPago } from "@/components/pago/MedioPago";
+import { BotonPse, FormularioTarjeta } from "@/components/pago/Openpay";
 import { Aviso, Campo, CuentaRegresiva, claseCampo } from "@/components/reserva/FlujoReserva";
 import { claseBoton } from "@/components/ui";
 
 import { enlaceWhatsApp } from "@/lib/sitio";
-import { cantidadTexto, cuandoTexto, problemaLinea } from "@/lib/formato";
+import { cantidadTexto, cuandoTexto, formatoPrecio, problemaLinea } from "@/lib/formato";
 import { itemsParaServidor, useCarrito, vinculo } from "./Carrito";
 
 type Datos = {
@@ -36,10 +41,13 @@ type Datos = {
 export function Checkout({
   minutosHold,
   paypal,
+  openpay,
 }: {
   minutosHold: number;
   /** Null si PayPal no está configurado o no hay TRM utilizable. */
   paypal: ClientePaypal | null;
+  /** Null si Openpay no está configurado. */
+  openpay: ClienteOpenpay | null;
 }) {
   const router = useRouter();
   const { items, reserva, vincular, abrir } = useCarrito();
@@ -338,26 +346,65 @@ export function Checkout({
               </p>
             )}
 
-            {validacion && <MedioPaypal totalCop={validacion.total} trm={trm?.valor ?? null} />}
+            {!vencido && validacion && (
+              <MedioPago
+                openpay={
+                  openpay && (
+                    <div className="rounded-card border border-verde bg-blanco p-4">
+                      <h3 className="font-serif text-h3 text-verde">
+                        Pagas {formatoPrecio(validacion.total, "COP", null)} en pesos colombianos
+                      </h3>
+                      <div className="mt-4">
+                        <FormularioTarjeta
+                          openpay={openpay}
+                          textoBoton={`Pagar ${formatoPrecio(validacion.total, "COP", null)}`}
+                          enviar={async (token, sesion) => pagarTarjetaPedido(pedido.codigo, await token(), sesion)}
+                          alExito={() => router.push(`/servicios/pedido/${pedido.codigo}`)}
+                          alError={setAviso}
+                        />
+                      </div>
+                      <div className="mt-6 border-t border-niebla pt-4">
+                        <p className="text-small">
+                          ¿Prefieres pagar desde tu cuenta bancaria? Te llevamos a tu banco con PSE.
+                        </p>
+                        <div className="mt-3">
+                          <BotonPse
+                            iniciar={() => iniciarPsePedido(pedido.codigo)}
+                            alError={setAviso}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                paypal={
+                  paypal && (
+                    <>
+                      <MedioPaypal totalCop={validacion.total} trm={trm?.valor ?? null} />
+                      <div className="mt-4">
+                        <BotonPaypal
+                          paypal={paypal}
+                          iniciar={() => iniciarPagoPedido(pedido.codigo)}
+                          aprobar={capturarPagoPedido}
+                          alAprobar={() => router.push(`/servicios/pedido/${pedido.codigo}`)}
+                          alError={setAviso}
+                        />
+                      </div>
+                    </>
+                  )
+                }
+              />
+            )}
             {aviso && <Aviso>{aviso}</Aviso>}
 
-            <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-8">
               <button type="button" onClick={volver} className={claseBoton("secundario")}>
                 <ArrowLeft size={20} strokeWidth={1.5} aria-hidden /> Volver a tus datos
               </button>
-              {paypal && !vencido && (
-                <BotonPaypal
-                  paypal={paypal}
-                  iniciar={() => iniciarPagoPedido(pedido.codigo)}
-                  capturar={capturarPagoPedido}
-                  alAprobar={() => router.push(`/servicios/pedido/${pedido.codigo}`)}
-                  alError={setAviso}
-                />
-              )}
             </div>
             <p className="mt-4 max-w-[65ch] text-small">
-              {paypal
-                ? "¿Prefieres pagar en pesos colombianos? Escríbenos por "
+              {paypal || openpay
+                ? "¿Tienes dudas con el pago? Escríbenos por "
                 : "El pago en línea no está disponible en este momento. Escríbenos por "}
               <a
                 href={enlaceWhatsApp(`Hola, quiero pagar mi pedido de servicios ${pedido.codigo}`)}

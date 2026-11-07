@@ -12,8 +12,13 @@ import {
   vincularReserva,
   type ValidacionCarrito,
 } from "@lauburu/backend/pedidos";
-import { capturarPagoPaypal, iniciarPagoPaypal } from "@lauburu/backend/pagos";
-import { dentroDelLimite } from "@/lib/limites";
+import {
+  capturarPagoPaypal,
+  iniciarPagoPaypal,
+  iniciarPseOpenpay,
+  pagarConTarjetaOpenpay,
+} from "@lauburu/backend/pagos";
+import { dentroDelLimite, urlSitio } from "@/lib/limites";
 
 type Item = { servicioId: number; fecha: string | null; turno: string | null; cantidad: number };
 type Vinculo = { codigo: string; correo: string } | null;
@@ -66,4 +71,18 @@ export async function iniciarPagoPedido(codigo: string) {
 export async function capturarPagoPedido(idOrden: string) {
   if (!(await dentroDelLimite("capturar-pago", "pago"))) return DEMASIADAS_PETICIONES;
   return capturarPagoPaypal(idOrden);
+}
+
+/** Openpay: del navegador solo llegan el token de la tarjeta y el id antifraude. */
+export async function pagarTarjetaPedido(codigo: string, token: string, deviceSessionId: string) {
+  if (!(await dentroDelLimite("pagar-tarjeta", "pago"))) return DEMASIADAS_PETICIONES;
+  return pagarConTarjetaOpenpay({ destino: { tipo: "pedido", codigo }, token, deviceSessionId });
+}
+
+export async function iniciarPsePedido(codigo: string) {
+  if (!(await dentroDelLimite("iniciar-pse", "pago"))) return DEMASIADAS_PETICIONES;
+  return iniciarPseOpenpay({
+    destino: { tipo: "pedido", codigo },
+    urlRetorno: `${await urlSitio()}/servicios/pedido/${encodeURIComponent(codigo)}`,
+  });
 }

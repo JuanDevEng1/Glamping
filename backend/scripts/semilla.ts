@@ -1,7 +1,8 @@
 // Carga los festivos, las temporadas altas y las fechas especiales de Colombia 2026–2028 sin
-// sobrescribir lo que ya exista. Con --ejemplo también crea configuración y servicios DE PRUEBA.
+// sobrescribir lo que ya exista, y el catálogo real de servicios (cabalgatas) con sus cupos.
+// Con --ejemplo también crea la configuración de tarifas DE PRUEBA.
 // Uso: npm run db:seed            ·  npm run db:seed:ejemplo
-import { like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import {
   ajustesFecha,
   aliados,
@@ -11,6 +12,7 @@ import {
   getDb,
   servicios,
   temporadas,
+  type Foto,
 } from "../src/db";
 import { hoyEnBogota } from "../src/moneda";
 import {
@@ -61,184 +63,131 @@ if (process.argv.includes("--ejemplo")) {
     .values({ precioBase: 420_000, precioAlto: 490_000, precioPersonaExtra: 60_000 })
     .onConflictDoNothing();
   console.log("Configuración lista.");
-
-  if ((await db.select({ id: servicios.id }).from(servicios).limit(1)).length === 0) {
-    await sembrarServicios();
-    console.log("Aliados, servicios y cupos de ejemplo listos (60 días).");
-  }
 }
+
+await sembrarCabalgatas();
 
 await db.$client.end();
 
 // ---------------------------------------------------------------------------
-// Servicios DE EJEMPLO (tomados de las maquetas). TODO(cliente): aliados, textos y precios reales.
+// Catálogo real: cabalgatas que opera el glamping. Idempotente (upsert por slug).
+// Los cupos se crean DIAS_CUPOS días hacia adelante: vuelve a correr la semilla para extenderlos.
 // ---------------------------------------------------------------------------
 
-async function sembrarServicios() {
-  const [finca, cocina, transporte] = await db
-    .insert(aliados)
-    .values([
-      { nombre: "Finca aliada de la vereda (ejemplo)", correo: "finca@example.com" },
-      { nombre: "Cocina del glamping (ejemplo)", correo: "cocina@example.com" },
-      { nombre: "Transporte rural (ejemplo)", correo: "transporte@example.com" },
-    ])
-    .returning({ id: aliados.id });
+async function sembrarCabalgatas() {
+  const DIAS_CUPOS = 90;
+  const CABALLOS = 6;
 
-  const creados = await db
-    .insert(servicios)
-    .values([
-      {
-        slug: "cabalgata-al-mirador",
-        aliadoId: finca!.id,
-        nombre: "Cabalgata al mirador",
-        categoria: "tours",
-        resumen: "A caballo entre cafetales y bosque de niebla hasta un mirador de la vereda.",
-        descripcion:
-          "Recorre a caballo los caminos de herradura de la vereda Cuchilla del Salado, entre cafetales y bosque de niebla, hasta un mirador con vista a las montañas de Manizales. Te acompaña un guía local todo el camino.",
-        precio: 85_000,
-        unidadPrecio: "persona",
-        tipoStock: "cupos",
-        maxPorPedido: 4,
-        orden: 1,
-        duracion: "2 horas y media",
-        nivel: "Moderado, apto para principiantes",
-        puntoEncuentro: "Entrada del glamping",
-        turnos: ["09:00", "15:00"],
-        incluye: [
-          "Caballo manso con montura",
-          "Casco de protección",
-          "Guía local durante el recorrido",
-        ],
-        noIncluye: ["Propinas para el guía", "Calzado cerrado y ropa para lluvia"],
-        condiciones: [
-          { titulo: "Edad mínima", texto: "Desde los 8 años, en compañía de un adulto." },
-        ],
-        fotos: [
-          "Caballos en un sendero de montaña con bosque de niebla",
-          "Vista panorámica desde el mirador",
-          "Guía local junto a los caballos",
-        ],
-      },
-      {
-        slug: "cena-junto-a-la-fogata",
-        aliadoId: cocina!.id,
-        nombre: "Cena junto a la fogata",
-        categoria: "gastronomia",
-        resumen: "Cena de tres tiempos preparada al fuego, junto a la fogata.",
-        descripcion:
-          "Una cena de tres tiempos preparada al fuego, servida junto a la fogata al anochecer.",
-        precio: 180_000,
-        unidadPrecio: "pareja",
-        tipoStock: "cupos",
-        maxPorPedido: 3,
-        orden: 2,
-        duracion: "2 horas",
-        turnos: ["19:00"],
-        incluye: ["Entrada, plato fuerte y postre", "Bebida caliente"],
-        fotos: ["Cena servida junto a una fogata al anochecer"],
-      },
-      {
-        slug: "picnic-en-el-mirador",
-        aliadoId: cocina!.id,
-        nombre: "Picnic en el mirador",
-        categoria: "gastronomia",
-        resumen: "Canasta con quesos, pan y frutas de la región para disfrutar en la montaña.",
-        descripcion:
-          "Una canasta con quesos, pan artesanal y frutas de la región, lista para llevar al mirador.",
-        precio: 70_000,
-        unidadPrecio: "pareja",
-        tipoStock: "unidades",
-        stock: 10,
-        maxPorPedido: 2,
-        orden: 3,
-        incluye: ["Canasta y manta", "Quesos, pan y frutas"],
-        fotos: ["Canasta de picnic sobre una manta en la montaña"],
-      },
-      {
-        slug: "transporte-desde-manizales",
-        aliadoId: transporte!.id,
-        nombre: "Transporte desde Manizales",
-        categoria: "transporte",
-        resumen: "Te recogemos en Manizales y te llevamos en 4x4 hasta el glamping.",
-        descripcion:
-          "Te recogemos en Manizales y te llevamos en un vehículo 4x4 hasta el glamping. Hasta 4 pasajeros.",
-        precio: 90_000,
-        unidadPrecio: "trayecto",
-        tipoStock: "cupos",
-        maxPorPedido: 1,
-        orden: 4,
-        duracion: "45 minutos",
-        turnos: ["10:00", "14:00"],
-        fotos: ["Camioneta 4x4 en un camino rural de montaña"],
-      },
-      {
-        slug: "tour-de-cafe",
-        aliadoId: finca!.id,
-        nombre: "Tour de café en finca",
-        categoria: "fincas",
-        resumen: "Conoce el café desde la semilla hasta la taza en una finca vecina.",
-        descripcion:
-          "Recorre una finca cafetera de la zona y conoce el proceso del café desde la semilla hasta la taza.",
-        precio: 110_000,
-        unidadPrecio: "persona",
-        tipoStock: "cupos",
-        maxPorPedido: 6,
-        orden: 5,
-        duracion: "3 horas",
-        turnos: ["09:00"],
-        fotos: ["Recolección de café en una finca vecina"],
-      },
-      {
-        slug: "kit-de-celebracion",
-        aliadoId: cocina!.id,
-        nombre: "Kit de celebración",
-        categoria: "decoracion",
-        resumen: "Decoración sencilla para cumpleaños, aniversarios o propuestas.",
-        descripcion:
-          "Preparamos el glamping con una decoración sencilla para tu celebración antes de tu llegada.",
-        precio: 120_000,
-        unidadPrecio: "unidad",
-        tipoStock: "unidades",
-        stock: 5,
-        maxPorPedido: 1,
-        orden: 6,
-        fotos: ["Decoración con flores y velas en el glamping"],
-      },
-      {
-        slug: "cafe-de-bienvenida",
-        aliadoId: cocina!.id,
-        nombre: "Café de bienvenida",
-        categoria: "gastronomia",
-        resumen: "Un café de la zona para recibirte al llegar.",
-        descripcion: "Al llegar te recibimos con un café de la zona.",
-        precio: 0,
-        unidadPrecio: "persona",
-        tipoStock: "unidades",
-        stock: 0,
-        incluidoOExtra: "incluido",
-        orden: 7,
-        fotos: ["Taza de café sobre una mesa de madera"],
-      },
-    ])
-    .returning({
-      id: servicios.id,
-      tipoStock: servicios.tipoStock,
-      turnos: servicios.turnos,
-      slug: servicios.slug,
-    });
+  const correo = (process.env.CORREO_ADMIN ?? "").split(",")[0]?.trim();
+  if (!correo) {
+    throw new Error("Falta CORREO_ADMIN: es el correo del aliado 'Lauburu Glamping'.");
+  }
 
+  const nombreAliado = "Lauburu Glamping";
+  const [existente] = await db
+    .select({ id: aliados.id })
+    .from(aliados)
+    .where(eq(aliados.nombre, nombreAliado))
+    .limit(1);
+  const aliadoId =
+    existente?.id ??
+    (
+      await db
+        .insert(aliados)
+        .values({ nombre: nombreAliado, correo })
+        .returning({ id: aliados.id })
+    )[0]!.id;
+
+  const comunes = {
+    aliadoId,
+    categoria: "tours",
+    unidadPrecio: "caballo",
+    tipoStock: "cupos",
+    stock: null,
+    maxPorPedido: CABALLOS,
+    incluidoOExtra: "extra",
+    activo: true,
+    // TODO(cliente): nivel, punto de encuentro y edad mínima.
+    nivel: null,
+    puntoEncuentro: null,
+    turnos: [],
+    incluye: ["Caballo ensillado y listo para montar", "Una persona que te guía y acompaña"],
+    noIncluye: [],
+    condiciones: [],
+  } satisfies Partial<typeof servicios.$inferInsert>;
+
+  // TODO(cliente): fotos propias. Estas son provisionales (en frontend/public/servicios).
+  const fotoBosque: Foto = {
+    src: "/servicios/cabalgata-pexels.jpg", // Licencia de Pexels: no exige crédito.
+    alt: "Dos jinetes a caballo por un camino de bosque, en blanco y negro",
+  };
+  const fotoEucaliptos: Foto = {
+    src: "/servicios/cabalgata-pexels-2.jpg", // Licencia de Pexels: no exige crédito.
+    alt: "Jinetes en fila por un sendero entre eucaliptos, con montañas al fondo",
+  };
+  const fotoSendero: Foto = {
+    src: "/servicios/cabalgata-juanedc.jpg",
+    alt: "Jinetes en fila por un sendero de pasto verde entre montañas, vistos desde un caballo",
+    credito: {
+      autor: "Juanedc",
+      url: "https://www.flickr.com/photos/juanedc/8990996856/",
+      licencia: "CC BY 2.0",
+      licenciaUrl: "https://creativecommons.org/licenses/by/2.0/",
+    },
+  };
+
+  const cabalgatas: (typeof servicios.$inferInsert)[] = [
+    {
+      ...comunes,
+      slug: "cabalgata-30-minutos",
+      nombre: "Cabalgata de 30 minutos",
+      resumen: "Un paseo corto a caballo por los caminos de la vereda, con guía.",
+      descripcion:
+        "Recorre a caballo los caminos de la vereda Cuchilla del Salado. Te entregamos el caballo ensillado y listo para montar, y una persona te acompaña y guía todo el camino. La hora la coordinamos contigo por WhatsApp.",
+      precio: 60_000,
+      orden: 1,
+      duracion: "30 minutos",
+      fotos: [fotoBosque, fotoSendero],
+    },
+    {
+      ...comunes,
+      slug: "cabalgata-hora-y-media",
+      nombre: "Cabalgata de 1 hora y media",
+      resumen: "Un recorrido largo a caballo entre las montañas de la vereda, con guía.",
+      descripcion:
+        "Tómate tu tiempo para recorrer a caballo los caminos y paisajes de la vereda Cuchilla del Salado. Te entregamos el caballo ensillado y listo para montar, y una persona te acompaña y guía todo el camino. La hora la coordinamos contigo por WhatsApp.",
+      precio: 150_000,
+      orden: 2,
+      duracion: "1 hora y media",
+      fotos: [fotoEucaliptos, fotoBosque],
+    },
+  ];
+
+  const ids: number[] = [];
+  for (const { slug, ...datos } of cabalgatas) {
+    const [fila] = await db
+      .insert(servicios)
+      .values({ slug, ...datos })
+      .onConflictDoUpdate({ target: servicios.slug, set: datos })
+      .returning({ id: servicios.id });
+    ids.push(fila!.id);
+  }
+
+  // Los cupos existentes no se tocan, para no perder lo ya reservado.
   const hoy = hoyEnBogota();
-  const cupos = creados
-    .filter((s) => s.tipoStock === "cupos")
-    .flatMap((s) =>
-      Array.from({ length: 60 }, (_, i) => sumarDias(hoy, i)).flatMap((fecha) =>
-        (s.turnos.length ? s.turnos : [""]).map((turno) => ({
-          servicioId: s.id,
-          fecha,
-          turno,
-          capacidad: s.slug === "transporte-desde-manizales" ? 1 : 6,
+  await db
+    .insert(cuposServicio)
+    .values(
+      ids.flatMap((servicioId) =>
+        Array.from({ length: DIAS_CUPOS }, (_, i) => ({
+          servicioId,
+          fecha: sumarDias(hoy, i),
+          turno: "",
+          capacidad: CABALLOS,
         })),
       ),
-    );
-  await db.insert(cuposServicio).values(cupos);
+    )
+    .onConflictDoNothing();
+
+  console.log(`Cabalgatas listas, con cupos para ${DIAS_CUPOS} días.`);
 }

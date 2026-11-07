@@ -13,6 +13,7 @@ import {
   time,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -57,6 +58,8 @@ export const configuracion = pgTable(
     /** Última TRM conocida (COP por 1 USD): respaldo si datos.gov.co no responde. */
     trmValor: numeric({ precision: 12, scale: 2 }),
     trmFecha: date({ mode: "string" }),
+    /** Depósito de garantía por reserva (se autoriza en PayPal, no se cobra). 0 = sin depósito. */
+    montoDeposito: integer().notNull().default(100_000),
   },
   (t) => [
     check("configuracion_fila_unica", sql`${t.id} = 1`),
@@ -73,6 +76,7 @@ export const configuracion = pgTable(
       sql`${t.maxAdicionales} >= 0 and ${t.precioAdicionalAdulto} >= 0 and ${t.precioAdicionalNino} >= 0`,
     ),
     check("configuracion_mascotas", sql`${t.precioMascota} >= 0`),
+    check("configuracion_deposito", sql`${t.montoDeposito} >= 0`),
   ],
 );
 
@@ -182,6 +186,16 @@ export const aliados = pgTable("aliados", {
   telefono: text(),
 });
 
+/**
+ * Foto de un servicio. Sin `src` se muestra un recuadro con `alt` mientras llega la foto real.
+ * `src` es una ruta de `frontend/public`. `credito` va cuando la licencia lo exige (p. ej. CC BY).
+ */
+export type Foto = {
+  alt: string;
+  src?: string;
+  credito?: { autor: string; url: string; licencia: string; licenciaUrl: string };
+};
+
 export const servicios = pgTable(
   "servicios",
   {
@@ -197,7 +211,7 @@ export const servicios = pgTable(
     resumen: text().notNull(),
     descripcion: text().notNull(),
     precio: integer().notNull(),
-    unidadPrecio: text({ enum: ["persona", "pareja", "trayecto", "unidad"] }).notNull(),
+    unidadPrecio: text({ enum: ["persona", "pareja", "trayecto", "unidad", "caballo"] }).notNull(),
     tipoStock: text({ enum: ["cupos", "unidades"] }).notNull(),
     /** Solo para tipoStock = unidades. Se descuenta al confirmar el pago. */
     stock: integer(),
@@ -214,8 +228,7 @@ export const servicios = pgTable(
     incluye: jsonb().$type<string[]>().notNull().default([]),
     noIncluye: jsonb().$type<string[]>().notNull().default([]),
     condiciones: jsonb().$type<{ titulo: string; texto: string }[]>().notNull().default([]),
-    /** Descripción de cada foto mientras llegan las reales. TODO(cliente): fotos reales. */
-    fotos: jsonb().$type<string[]>().notNull().default([]),
+    fotos: jsonb().$type<Foto[]>().notNull().default([]),
   },
   (t) => [
     check("servicios_precio", sql`${t.precio} >= 0`),
@@ -293,7 +306,7 @@ export const itemsPedido = pgTable(
 // Pagos (tarea pasarelas). Comunes a todas las pasarelas.
 // ---------------------------------------------------------------------------
 
-export const PASARELAS = ["paypal", "wompi", "bold"] as const;
+export const PASARELAS = ["paypal", "openpay", "wompi", "bold"] as const;
 export const ESTADOS_PAGO = [
   "creado",
   "capturado",
@@ -301,11 +314,16 @@ export const ESTADOS_PAGO = [
   "rechazado",
   "reembolsado",
   "requiere_reembolso",
+  // Solo depósitos de garantía (concepto = deposito):
+  "autorizado", // Dinero apartado (PayPal Authorize / Openpay capture=false), sin cobrar.
+  "cobrado", // El admin cobró daños desde la pasarela (total o parcial).
+  "anulado", // Se liberó desde la pasarela o venció la autorización.
 ] as const;
 
 /**
- * Un intento de cobro de una reserva o de un pedido. Guarda el monto cobrado en la
- * moneda de la pasarela y la TRM usada (PayPal cobra en USD).
+ * Un intento de cobro de una reserva o de un pedido, o un depósito de garantía de una
+ * reserva (autorizar y capturar). Guarda el monto en la moneda de la pasarela y la TRM usada
+ * (PayPal cobra en USD).
  */
 export const pagos = pgTable(
   "pagos",
@@ -314,13 +332,21 @@ export const pagos = pgTable(
     pasarela: text({ enum: PASARELAS }).notNull(),
     reservaId: integer().references(() => reservas.id),
     pedidoId: integer().references(() => pedidos.id),
-    /** Id de la orden o transacción en la pasarela. */
+    /** Id de la orden en la pasarela. Openpay: nuestro `order_id` (PSE no devuelve otro id). */
     idExterno: text().notNull(),
+    /** PayPal: id de la captura. Openpay: id de la transacción (cargo). */
     idCaptura: text(),
+    /** `deposito`: depósito de garantía autorizado (no cobrado) de una reserva. */
+    concepto: text({ enum: ["cobro", "deposito"] })
+      .notNull()
+      .default("cobro"),
+    /** Depósitos: id de la autorización vigente en PayPal (cambia si se reautoriza). */
+    idAutorizacion: text(),
+    autorizacionVenceEn: timestamp({ withTimezone: true }),
     estado: text({ enum: ESTADOS_PAGO }).notNull().default("creado"),
     montoCop: integer().notNull(),
     moneda: text({ enum: ["COP", "USD"] }).notNull(),
-    /** Monto en la unidad mínima de `moneda` (centavos para USD). */
+    /** Monto en la unidad que usa la pasarela: centavos para USD (PayPal), pesos para COP (Openpay, sin TRM). */
     montoMoneda: integer().notNull(),
     trm: numeric({ precision: 12, scale: 2 }),
     creadoEn: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -331,9 +357,15 @@ export const pagos = pgTable(
     check("pagos_destino", sql`(${t.reservaId} is null) <> (${t.pedidoId} is null)`),
     check(
       "pagos_estado",
-      sql`${t.estado} in ('creado', 'capturado', 'aprobado', 'rechazado', 'reembolsado', 'requiere_reembolso')`,
+      sql`${t.estado} in ('creado', 'capturado', 'aprobado', 'rechazado', 'reembolsado', 'requiere_reembolso', 'autorizado', 'cobrado', 'anulado')`,
     ),
     check("pagos_montos", sql`${t.montoCop} > 0 and ${t.montoMoneda} > 0`),
+    check("pagos_concepto", sql`${t.concepto} in ('cobro', 'deposito')`),
+    check("pagos_deposito_reserva", sql`${t.concepto} = 'cobro' or ${t.reservaId} is not null`),
+    // Un solo depósito en curso por reserva (evita duplicados por doble clic).
+    uniqueIndex("pagos_deposito_vigente")
+      .on(t.reservaId)
+      .where(sql`${t.concepto} = 'deposito' and ${t.estado} in ('creado', 'autorizado')`),
   ],
 );
 

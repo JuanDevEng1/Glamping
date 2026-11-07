@@ -86,6 +86,7 @@ const UNIDADES = {
   pareja: ["pareja", "parejas"],
   trayecto: ["trayecto", "trayectos"],
   unidad: ["unidad", "unidades"],
+  caballo: ["caballo", "caballos"],
 } as const;
 
 type Unidad = keyof typeof UNIDADES;

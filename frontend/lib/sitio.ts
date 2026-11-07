@@ -5,7 +5,7 @@ export const sitio = {
   descriptiva: "GLAMPING · MANIZALES",
   direccion: "Vereda Cuchilla del Salado, Manizales, Caldas",
   whatsapp: "570000000000", // formato internacional sin "+" ni espacios
-  correo: "hola@lauburu.co",
+  correo: "lauburuglamping@gmail.com",
   instagram: "https://www.instagram.com/",
   rnt: "Pendiente",
 } as const;

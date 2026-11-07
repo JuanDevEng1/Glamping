@@ -14,6 +14,7 @@ import {
   reservas,
   servicios,
   type Db,
+  type Foto,
   type Tx,
 } from "./db";
 import { hoyEnBogota } from "./moneda";
@@ -125,7 +126,7 @@ export type ServicioResumen = {
   incluidoOExtra: ServicioCatalogo["incluidoOExtra"];
   duracion: string | null;
   aliado: string;
-  foto: string;
+  foto: Foto;
   /** Hay al menos un cupo o unidad libre en los próximos DIAS_VENTA días. */
   disponible: boolean;
 };
@@ -146,7 +147,7 @@ const columnasResumen = {
 };
 
 async function resumir(
-  filas: (Omit<ServicioResumen, "foto" | "disponible"> & { tipoStock: string; fotos: string[] })[],
+  filas: (Omit<ServicioResumen, "foto" | "disponible"> & { tipoStock: string; fotos: Foto[] })[],
 ) {
   const hoy = hoyEnBogota();
   const disp = await cargarDisponibilidad(
@@ -160,7 +161,7 @@ async function resumir(
 
   return filas.map(({ tipoStock, fotos, ...f }): ServicioResumen => ({
     ...f,
-    foto: fotos[0] ?? f.nombre,
+    foto: fotos[0] ?? { alt: f.nombre },
     disponible:
       f.incluidoOExtra === "incluido" ||
       (tipoStock === "cupos" ? conCupos.has(f.id) : (disp.unidades.get(f.id) ?? 0) > 0),
@@ -213,7 +214,7 @@ export type ServicioDetalle = Omit<ServicioResumen, "foto" | "disponible"> & {
   incluye: string[];
   noIncluye: string[];
   condiciones: { titulo: string; texto: string }[];
-  fotos: string[];
+  fotos: Foto[];
   /** Fechas con cupos libres (servicios por cupos), dentro de la estadía si hay una vinculada. */
   fechas: FechaDisponible[];
   /** Unidades libres (servicios por unidades). */

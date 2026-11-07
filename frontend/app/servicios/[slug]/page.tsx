@@ -10,7 +10,7 @@ import { CompraServicio, GaleriaServicio } from "@/components/servicios/CompraSe
 import {
   Chip,
   EncabezadoSeccion,
-  FotoPendiente,
+  Foto,
   Seccion,
   Tarjeta,
   claseBoton,
@@ -75,7 +75,9 @@ export default async function DetalleServicio({ params }: Params) {
 
           <div className="mt-8 grid items-start gap-8 lg:grid-cols-12 lg:gap-12">
             <div className="flex flex-col gap-8 lg:col-span-7">
-              <GaleriaServicio fotos={servicio.fotos.length ? servicio.fotos : [servicio.nombre]} />
+              <GaleriaServicio
+                fotos={servicio.fotos.length ? servicio.fotos : [{ alt: servicio.nombre }]}
+              />
 
               <div className="flex flex-col gap-4 border-b border-niebla pb-8">
                 <div className="flex flex-wrap items-center gap-2">
@@ -202,7 +204,11 @@ export default async function DetalleServicio({ params }: Params) {
             {recomendados.map((s) => (
               <li key={s.id}>
                 <Tarjeta borde="miel" className="flex flex-col gap-2">
-                  <FotoPendiente descripcion={s.foto} className="aspect-[3/2]" />
+                  <Foto
+                    foto={s.foto}
+                    sizes="(min-width: 768px) 33vw, 100vw"
+                    className="aspect-[3/2]"
+                  />
                   <div className="mt-2">
                     <Chip tipo={s.incluidoOExtra} />
                   </div>

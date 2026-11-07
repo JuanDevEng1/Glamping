@@ -3,9 +3,15 @@
 // Botón de PayPal con el JS SDK v6, cargado con <script> (sin dependencia npm).
 // Documentación: https://developer.paypal.com/sdk/js/set-up («Include the SDK script»,
 // «Authenticate the SDK»: el client ID es público y basta para PayPal Checkout).
-// El servidor crea la orden (con el monto de la BD) y la captura; aquí nunca hay montos.
+// El servidor crea la orden (con el monto de la BD) y la captura, o la autoriza si es el
+// depósito de garantía (referencia del SDK v6, `onApprove`: "capture or authorize the payment
+// on your server", https://developer.paypal.com/sdk/js/reference). Aquí nunca hay montos.
 import { useEffect, useRef, useState } from "react";
-import type { ResultadoCapturar, ResultadoIniciar } from "@lauburu/backend/pagos";
+import type {
+  ResultadoCapturar,
+  ResultadoIniciar,
+  ResultadoIniciarDeposito,
+} from "@lauburu/backend/pagos";
 import type { ClientePaypal } from "@lauburu/backend/paypal";
 import { formatoPrecio } from "@/lib/formato";
 
@@ -66,8 +72,14 @@ function cargarSdk(entorno: "sandbox" | "live") {
   return cargaSdk;
 }
 
-const MENSAJES_INICIO: Record<Exclude<ResultadoIniciar, { ok: true }>["error"], string> = {
+const MENSAJES_INICIO: Record<
+  Exclude<ResultadoIniciarDeposito, { ok: true }>["error"],
+  string
+> = {
   no_disponible: "Se acabó el tiempo para pagar. Vuelve a elegir y apartamos de nuevo.",
+  falta_deposito: "Primero autoriza el depósito de garantía con PayPal.",
+  ya_existe: "Tu depósito ya está autorizado. Continúa con el pago.",
+  sin_deposito: "Esta reserva no necesita depósito de garantía.",
   sin_trm:
     "Hoy no podemos calcular el valor en dólares. Escríbenos por WhatsApp y te ayudamos a pagar.",
   sin_configuracion: "El pago con PayPal no está disponible en este momento.",
@@ -108,16 +120,21 @@ export function MedioPaypal({ totalCop, trm }: { totalCop: number; trm: number |
 export function BotonPaypal({
   paypal: { clientId, entorno },
   iniciar,
-  capturar,
+  aprobar,
   alAprobar,
   alError,
+  textoProcesando = "Procesando tu pago…",
+  textoCancelado = "Cancelaste el pago en PayPal. Seguimos apartando tu compra mientras corre el tiempo.",
 }: {
   paypal: ClientePaypal;
-  iniciar: () => Promise<ResultadoIniciar>;
-  capturar: (idOrden: string) => Promise<ResultadoCapturar>;
-  /** El pago se capturó: ir a la página que consulta el estado (el webhook confirma). */
+  iniciar: () => Promise<ResultadoIniciar | ResultadoIniciarDeposito>;
+  /** Captura el pago o autoriza el depósito en el servidor. */
+  aprobar: (idOrden: string) => Promise<ResultadoCapturar>;
+  /** El servidor capturó o autorizó: ir a la página que consulta el estado (confirma el webhook). */
   alAprobar: () => void;
   alError: (mensaje: string | null) => void;
+  textoProcesando?: string;
+  textoCancelado?: string;
 }) {
   const [estado, setEstado] = useState<"cargando" | "listo" | "procesando" | "no_disponible">(
     "cargando",
@@ -126,8 +143,8 @@ export function BotonPaypal({
   /** Motivo por el que el servidor no creó la orden (tiene prioridad sobre el error genérico). */
   const errorInicio = useRef<string | null>(null);
   // Las funciones del padre cambian en cada render; la sesión de PayPal se crea una sola vez.
-  const callbacks = useRef({ capturar, alAprobar, alError });
-  callbacks.current = { capturar, alAprobar, alError };
+  const callbacks = useRef({ aprobar, alAprobar, alError, textoCancelado });
+  callbacks.current = { aprobar, alAprobar, alError, textoCancelado };
 
   useEffect(() => {
     let vigente = true;
@@ -143,16 +160,14 @@ export function BotonPaypal({
       sesion.current = instancia.createPayPalOneTimePaymentSession({
         async onApprove({ orderId }) {
           setEstado("procesando");
-          const r = await callbacks.current.capturar(orderId);
+          const r = await callbacks.current.aprobar(orderId);
           if (r.ok) return callbacks.current.alAprobar();
           setEstado("listo");
           callbacks.current.alError(MENSAJES_CAPTURA[r.error]);
         },
         onCancel() {
           setEstado("listo");
-          callbacks.current.alError(
-            "Cancelaste el pago en PayPal. Seguimos apartando tu compra mientras corre el tiempo.",
-          );
+          callbacks.current.alError(callbacks.current.textoCancelado);
         },
         onError() {
           setEstado("listo");
@@ -198,7 +213,7 @@ export function BotonPaypal({
     <div aria-busy={estado !== "listo"} className="w-full sm:w-72">
       {estado === "procesando" && (
         <p role="status" className="mb-2 text-small font-medium text-verde">
-          Procesando tu pago…
+          {textoProcesando}
         </p>
       )}
       {estado === "cargando" ? (

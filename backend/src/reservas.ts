@@ -1,7 +1,7 @@
 // Reservas: datos de tarifas desde la BD, calendario, cotización y hold (PLAN_DESARROLLO.md §5).
 // Toda entrada se valida con Zod aquí; el precio siempre lo recalcula el servidor con precios.ts.
 import { randomInt } from "node:crypto";
-import { and, eq, gt, gte, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { correoConfigurado, correosAdmin, enviarCorreo } from "./correos";
 import {
@@ -10,6 +10,7 @@ import {
   errorSinDatos,
   festivos,
   getDb,
+  pagos,
   reservas,
   temporadas,
   type Configuracion,
@@ -362,7 +363,47 @@ export type ReservaPublica = {
   totalCop: number;
   expiraEn: string;
   documentoRecibido: boolean;
+  /** Null si el glamping no pide depósito (montoDeposito = 0). */
+  deposito: DepositoPublico | null;
 };
+
+// ---------------------------------------------------------------------------
+// Depósito de garantía: se autoriza en el paso de pago, antes del cobro (ver pagos.ts)
+// ---------------------------------------------------------------------------
+
+export type DepositoPublico = {
+  montoCop: number;
+  /** Pasarela con la que se autorizó. */
+  pasarela: "paypal" | "openpay";
+  estado: "sin_iniciar" | "verificando" | "autorizado" | "cobrado" | "liberado";
+  /** Fecha aproximada en que el banco libera la retención (solo si sigue vigente). */
+  venceEn: string | null;
+};
+
+type FilaDeposito = Pick<
+  typeof pagos.$inferSelect,
+  "estado" | "idAutorizacion" | "autorizacionVenceEn"
+>;
+
+/** Estado visible del último intento de depósito de una reserva. */
+function estadoDeposito(fila: FilaDeposito | undefined): DepositoPublico["estado"] {
+  if (!fila) return "sin_iniciar";
+  switch (fila.estado) {
+    case "autorizado":
+      return "autorizado";
+    case "cobrado":
+      return "cobrado";
+    case "creado":
+      // Con autorización pedida a PayPal: falta el webhook. Sin ella: intento sin terminar.
+      return fila.idAutorizacion ? "verificando" : "sin_iniciar";
+    case "anulado":
+      return fila.idAutorizacion ? "liberado" : "sin_iniciar";
+    case "reembolsado":
+      return "liberado";
+    default:
+      return "sin_iniciar";
+  }
+}
 
 function adicionalesDe(r: {
   adultosAdicionales: number;
@@ -395,11 +436,38 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
       totalCop: reservas.totalCop,
       expiraEn: reservas.expiraEn,
       documentoRecibidoEn: reservas.documentoRecibidoEn,
+      id: reservas.id,
+      montoDeposito: configuracion.montoDeposito,
     })
     .from(reservas)
+    .leftJoin(configuracion, eq(configuracion.id, 1))
     .where(eq(reservas.codigo, codigo))
     .limit(1);
   if (!r) return null;
+  const [ultimoDeposito] = r.montoDeposito
+    ? await getDb()
+        .select({
+          estado: pagos.estado,
+          pasarela: pagos.pasarela,
+          idAutorizacion: pagos.idAutorizacion,
+          autorizacionVenceEn: pagos.autorizacionVenceEn,
+        })
+        .from(pagos)
+        .where(and(eq(pagos.reservaId, r.id), eq(pagos.concepto, "deposito")))
+        .orderBy(desc(pagos.id))
+        .limit(1)
+    : [];
+  const deposito: DepositoPublico | null = r.montoDeposito
+    ? {
+        montoCop: r.montoDeposito,
+        pasarela: ultimoDeposito?.pasarela === "openpay" ? "openpay" : "paypal",
+        estado: estadoDeposito(ultimoDeposito),
+        venceEn:
+          ultimoDeposito?.estado === "autorizado" || ultimoDeposito?.estado === "creado"
+            ? (ultimoDeposito.autorizacionVenceEn?.toISOString() ?? null)
+            : null,
+      }
+    : null;
   // Un hold vencido se muestra como expirado aunque aún no se haya marcado en la BD.
   const estado =
     r.estado === "pendiente" && r.expiraEn.getTime() < Date.now() ? "expirada" : r.estado;
@@ -408,6 +476,8 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
     adultosAdicionales: _a,
     ninosAdicionales: _n,
     menoresAdicionales: _m,
+    id: _id,
+    montoDeposito: _d,
     ...resto
   } = r;
   return {
@@ -418,6 +488,7 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
     correo: enmascararCorreo(r.correo),
     expiraEn: r.expiraEn.toISOString(),
     documentoRecibido: documentoRecibidoEn !== null,
+    deposito,
   };
 }
 

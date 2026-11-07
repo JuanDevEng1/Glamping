@@ -9,13 +9,16 @@ import {
   ArrowRight,
   Check,
   CircleAlert,
+  CircleCheck,
   Car,
   Clock,
   Minus,
   PawPrint,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import type { Trm } from "@lauburu/backend/moneda";
+import type { ClienteOpenpay } from "@lauburu/backend/openpay";
 import type { ClientePaypal } from "@lauburu/backend/paypal";
 import {
   SIN_ADICIONALES,
@@ -28,17 +31,24 @@ import {
 import type { ResultadoCotizacion, ResultadoCrear, TipoDocumento } from "@lauburu/backend/reservas";
 import { useRouter } from "next/navigation";
 import {
+  autorizarDepositoReserva,
   capturarPagoReserva,
   cotizar,
   crearReserva,
+  depositoTarjetaReserva,
+  iniciarDepositoReserva,
   iniciarPagoReserva,
+  iniciarPseReserva,
   liberarReserva,
+  pagarTarjetaReserva,
 } from "@/app/reservas/acciones";
 import { Container } from "@/components/Container";
 import { NotaMoneda, Precio } from "@/components/Moneda";
 import { BotonPaypal, MedioPaypal } from "@/components/pago/BotonPaypal";
+import { MedioPago } from "@/components/pago/MedioPago";
+import { BotonPse, FormularioTarjeta } from "@/components/pago/Openpay";
 import { FotoPendiente, claseBoton } from "@/components/ui";
-import { formatoFechaCorta, formatoHora } from "@/lib/formato";
+import { formatoFechaCorta, formatoHora, formatoPrecio } from "@/lib/formato";
 import { enlaceWhatsApp } from "@/lib/sitio";
 import { Calendario } from "./Calendario";
 
@@ -56,6 +66,8 @@ export type ConfigFlujo = {
   horaCheckin: string;
   horaCheckout: string;
   minutosHold: number;
+  /** Depósito de garantía obligatorio, que se autoriza en el paso de pago antes del cobro (0 = sin depósito). */
+  montoDeposito: number;
 };
 
 /** Tope técnico de backend/src/reservas.ts (esquemaEstadia); no hay límite de negocio. */
@@ -373,7 +385,7 @@ function Resumen({
       aria-labelledby="resumen-titulo"
       className="rounded-card border border-niebla bg-blanco p-5 md:p-6 lg:sticky lg:top-24"
     >
-      <FotoPendiente descripcion="Vista del glamping" className="aspect-[3/2]" />
+      <FotoPendiente descripcion="Vista del glamping" className="aspect-3/2" />
       <h2 id="resumen-titulo" className="mt-4 font-serif text-h3 text-verde">
         Resumen de tu reserva
       </h2>
@@ -507,6 +519,7 @@ export function FlujoReserva({
   trm,
   hoy,
   paypal,
+  openpay,
 }: {
   config: ConfigFlujo;
   /** TIPOS_DOCUMENTO de backend/src/reservas.ts (el cliente no puede importar ese módulo). */
@@ -515,6 +528,8 @@ export function FlujoReserva({
   hoy: string;
   /** Null si PayPal no está configurado o no hay TRM utilizable. */
   paypal: ClientePaypal | null;
+  /** Null si Openpay no está configurado. */
+  openpay: ClienteOpenpay | null;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState(1);
@@ -536,6 +551,10 @@ export function FlujoReserva({
   const [aviso, setAviso] = useState<string | null>(null);
   const [reserva, setReserva] = useState<{ codigo: string; expiraEn: string } | null>(null);
   const [holdVencido, setHoldVencido] = useState(false);
+  /** Pasarela con la que ya se autorizó el depósito de esta reserva (el pago va por la misma). */
+  const [deposito, setDeposito] = useState<"openpay" | "paypal" | null>(null);
+  /** Dentro de Openpay: tarjeta (depósito y pago en un clic) o PSE (depósito con tarjeta y luego PSE). */
+  const [modoOpenpay, setModoOpenpay] = useState<"tarjeta" | "pse">("tarjeta");
   const [version, setVersion] = useState(0);
   const [enviando, iniciar] = useTransition();
   const titulo = useRef<HTMLHeadingElement>(null);
@@ -543,6 +562,9 @@ export function FlujoReserva({
 
   const trmValor = trm?.valor ?? null;
   const cot = cotizacion?.ok ? cotizacion : null;
+  const conDeposito = config.montoDeposito > 0;
+  const faltaDeposito = conDeposito && !deposito;
+  const montoDeposito = formatoPrecio(config.montoDeposito, "COP", null);
 
   // Cotización en el servidor cada vez que cambian fechas o huéspedes.
   const { adultos, ninos, menores } = adicionales;
@@ -608,6 +630,7 @@ export function FlujoReserva({
         setReserva({ codigo: r.codigo, expiraEn: r.expiraEn });
         setCotizacion(r.cotizacion);
         setHoldVencido(false);
+        setDeposito(null);
         setErrores({});
         setPaso(4);
         return;
@@ -1141,6 +1164,36 @@ export function FlujoReserva({
               <div>
                 {tituloPaso("Pago")}
 
+                {conDeposito && (
+                  <div className="mt-4 rounded-card border border-miel bg-blanco p-4 md:p-6">
+                    <p className="flex items-center gap-2 font-medium text-verde">
+                      <ShieldCheck size={24} strokeWidth={1.5} className="shrink-0" aria-hidden />
+                      Depósito de garantía de {montoDeposito}
+                    </p>
+                    <p className="mt-2 max-w-[65ch]">
+                      Para completar tu reserva, antes de pagar autorizas una retención de{" "}
+                      {montoDeposito}, igual sin importar cuántas noches te quedes. No es un cobro:
+                      si al salir todo queda en orden, la liberamos, y si hay daños cobramos solo lo
+                      necesario para repararlos y te contamos. Sin el depósito no podemos confirmar
+                      la reserva.
+                    </p>
+                    <ul className="mt-3 max-w-[65ch] list-disc space-y-1 pl-5 text-small">
+                      <li>
+                        Se hace con tarjeta de crédito o débito (también si pagas con PSE) o con
+                        PayPal, y necesita cupo o saldo disponible por ese valor.
+                      </li>
+                      <li>
+                        Tu banco libera la retención solo a los pocos días (unos 7 con tarjeta y
+                        hasta 29 con PayPal), aunque tu estadía sea después.
+                      </li>
+                      <li>
+                        Con tarjeta débito, tu banco puede descontar el monto de tu cuenta mientras
+                        dura la retención y devolverlo al liberarla.
+                      </li>
+                    </ul>
+                  </div>
+                )}
+
                 {holdVencido ? (
                   <div className="mt-6 rounded-card border border-terracota-oscuro bg-blanco p-5 md:p-6">
                     <p className="font-medium text-terracota-oscuro">
@@ -1178,26 +1231,218 @@ export function FlujoReserva({
                   </p>
                 )}
 
-                <MedioPaypal totalCop={cot.total} trm={trmValor} />
+                {deposito && (
+                  <p
+                    role="status"
+                    className="mt-4 flex items-start gap-3 rounded-card bg-verde-tinte p-4"
+                  >
+                    <CircleCheck
+                      size={24}
+                      strokeWidth={1.5}
+                      className="shrink-0 text-verde"
+                      aria-hidden
+                    />
+                    <span>
+                      Depósito autorizado: retuvimos {montoDeposito}{" "}
+                      {deposito === "openpay" ? "en tu tarjeta" : "en PayPal"}, sin cobrarlo. Ahora
+                      completa el pago con {deposito === "openpay" ? "Openpay" : "PayPal"}.
+                    </span>
+                  </p>
+                )}
+
+                {!holdVencido && (
+                  <MedioPago
+                    fijo={deposito}
+                    openpay={
+                      openpay && (
+                        <div className="rounded-card border border-verde bg-blanco p-4">
+                          <h3 className="font-serif text-h3 text-verde">
+                            Pagas {formatoPrecio(cot.total, "COP", null)} en pesos colombianos
+                          </h3>
+                          <fieldset className="mt-4">
+                            <legend className="text-small font-medium text-verde">
+                              ¿Con qué pagas la reserva?
+                            </legend>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(
+                                [
+                                  ["tarjeta", "Tarjeta de crédito o débito"],
+                                  ["pse", "PSE (desde tu cuenta bancaria)"],
+                                ] as const
+                              ).map(([valor, texto]) => (
+                                <label
+                                  key={valor}
+                                  className={`flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-small transition-colors duration-200 ${
+                                    modoOpenpay === valor
+                                      ? "border-verde text-verde"
+                                      : "border-niebla hover:border-verde"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="modo-openpay"
+                                    value={valor}
+                                    checked={modoOpenpay === valor}
+                                    onChange={() => {
+                                      setAviso(null);
+                                      setModoOpenpay(valor);
+                                    }}
+                                    className="accent-verde"
+                                  />
+                                  {texto}
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+
+                          {modoOpenpay === "tarjeta" ? (
+                            <div className="mt-4">
+                              {faltaDeposito && (
+                                <p className="mb-4 max-w-[65ch] text-small">
+                                  Con un solo clic retenemos el depósito de {montoDeposito} y
+                                  cobramos {formatoPrecio(cot.total, "COP", null)} a la misma
+                                  tarjeta.
+                                </p>
+                              )}
+                              <FormularioTarjeta
+                                openpay={openpay}
+                                textoBoton={
+                                  faltaDeposito
+                                    ? `Autorizar depósito y pagar ${formatoPrecio(cot.total, "COP", null)}`
+                                    : `Pagar ${formatoPrecio(cot.total, "COP", null)}`
+                                }
+                                enviar={async (token, sesion) => {
+                                  if (faltaDeposito) {
+                                    const d = await depositoTarjetaReserva(
+                                      reserva.codigo,
+                                      await token(),
+                                      sesion,
+                                    );
+                                    if (!d.ok && d.error !== "ya_existe") return d;
+                                    setDeposito("openpay");
+                                  }
+                                  return pagarTarjetaReserva(reserva.codigo, await token(), sesion);
+                                }}
+                                alExito={() =>
+                                  router.push(`/reservas/confirmacion/${reserva.codigo}`)
+                                }
+                                alError={setAviso}
+                              />
+                            </div>
+                          ) : (
+                            <div className="mt-4 space-y-4">
+                              {faltaDeposito && (
+                                <div>
+                                  <p className="max-w-[65ch] text-small">
+                                    <span className="font-medium text-verde">Paso 1 de 2.</span>{" "}
+                                    PSE no permite retener dinero, así que el depósito va con una
+                                    tarjeta de crédito o débito.
+                                  </p>
+                                  <div className="mt-3">
+                                    <FormularioTarjeta
+                                      openpay={openpay}
+                                      textoBoton={`Autorizar depósito de ${montoDeposito}`}
+                                      textoProcesando="Autorizando tu depósito…"
+                                      enviar={async (token, sesion) => {
+                                        const d = await depositoTarjetaReserva(
+                                          reserva.codigo,
+                                          await token(),
+                                          sesion,
+                                        );
+                                        return d.ok || d.error === "ya_existe" ? { ok: true } : d;
+                                      }}
+                                      alExito={() => setDeposito("openpay")}
+                                      alError={setAviso}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                              {!faltaDeposito && (
+                                <div>
+                                  <p className="max-w-[65ch] text-small">
+                                    {conDeposito && (
+                                      <span className="font-medium text-verde">Paso 2 de 2. </span>
+                                    )}
+                                    Te llevamos a tu banco con PSE para pagar{" "}
+                                    {formatoPrecio(cot.total, "COP", null)}.
+                                  </p>
+                                  <div className="mt-3">
+                                    <BotonPse
+                                      iniciar={() => iniciarPseReserva(reserva.codigo)}
+                                      alError={setAviso}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    paypal={
+                      paypal && (
+                        <>
+                          <MedioPaypal totalCop={cot.total} trm={trmValor} />
+                          {faltaDeposito ? (
+                            <div className="mt-4">
+                              <p className="max-w-[65ch] text-small">
+                                <span className="font-medium text-verde">Paso 1 de 2.</span>{" "}
+                                Autoriza en PayPal la retención del depósito de {montoDeposito}
+                                {trmValor
+                                  ? ` (unos ${formatoPrecio(config.montoDeposito, "USD", trmValor)})`
+                                  : ""}
+                                . Después pagas la reserva.
+                              </p>
+                              <div className="mt-3">
+                                <BotonPaypal
+                                  key="deposito"
+                                  paypal={paypal}
+                                  iniciar={() => iniciarDepositoReserva(reserva.codigo)}
+                                  aprobar={autorizarDepositoReserva}
+                                  alAprobar={() => setDeposito("paypal")}
+                                  alError={setAviso}
+                                  textoProcesando="Autorizando tu depósito…"
+                                  textoCancelado="Cancelaste la autorización en PayPal. Seguimos apartando tus fechas mientras corre el tiempo."
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-4">
+                              {conDeposito && (
+                                <p className="max-w-[65ch] text-small">
+                                  <span className="font-medium text-verde">Paso 2 de 2.</span>{" "}
+                                  Paga la reserva en PayPal.
+                                </p>
+                              )}
+                              <div className="mt-3">
+                                <BotonPaypal
+                                  key="pago"
+                                  paypal={paypal}
+                                  iniciar={() => iniciarPagoReserva(reserva.codigo)}
+                                  aprobar={capturarPagoReserva}
+                                  alAprobar={() =>
+                                    router.push(`/reservas/confirmacion/${reserva.codigo}`)
+                                  }
+                                  alError={setAviso}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    }
+                  />
+                )}
                 {aviso && <Aviso>{aviso}</Aviso>}
 
-                <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-8">
                   <button type="button" onClick={() => irA(3)} className={claseBoton("secundario")}>
                     <ArrowLeft size={20} strokeWidth={1.5} aria-hidden /> Volver a tus datos
                   </button>
-                  {paypal && !holdVencido && (
-                    <BotonPaypal
-                      paypal={paypal}
-                      iniciar={() => iniciarPagoReserva(reserva.codigo)}
-                      capturar={capturarPagoReserva}
-                      alAprobar={() => router.push(`/reservas/confirmacion/${reserva.codigo}`)}
-                      alError={setAviso}
-                    />
-                  )}
                 </div>
                 <p className="mt-4 max-w-[65ch] text-small">
-                  {paypal
-                    ? "¿Prefieres pagar en pesos colombianos? Escríbenos por "
+                  {paypal || openpay
+                    ? "¿Tienes dudas con el pago? Escríbenos por "
                     : "El pago en línea no está disponible en este momento. Escríbenos por "}
                   <a
                     href={enlaceWhatsApp(

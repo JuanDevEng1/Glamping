@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     // Por debajo del límite de 6 MB por petición de las funciones de Netlify.
     serverActions: { bodySizeLimit: "5mb" },
   },
+  allowedDevOrigins: ['recording-creative-publications-magnet.trycloudflare.com'],
 };
 
 export default nextConfig;

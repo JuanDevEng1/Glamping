@@ -8,28 +8,40 @@ import type { FechaDisponible, ServicioDetalle } from "@lauburu/backend/pedidos"
 import { UNIDADES_PRECIO } from "@lauburu/backend/servicios";
 import { fechasEnEstadiaAccion } from "@/app/servicios/acciones";
 import { Precio } from "@/components/Moneda";
-import { FotoPendiente, claseBoton } from "@/components/ui";
+import type { Foto as DatosFoto } from "@lauburu/backend/db";
+import { Foto, claseBoton } from "@/components/ui";
 import { cantidadTexto, formatoFechaDia, formatoHora } from "@/lib/formato";
 import { useCarrito, vinculo } from "./Carrito";
 
-export function GaleriaServicio({ fotos }: { fotos: string[] }) {
+export function GaleriaServicio({ fotos }: { fotos: DatosFoto[] }) {
   const [activa, setActiva] = useState(0);
   if (fotos.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <FotoPendiente bloque descripcion={fotos[activa]!} className="aspect-[3/2]" />
+      <Foto
+        bloque
+        priority
+        foto={fotos[activa]!}
+        sizes="(min-width: 1024px) 50vw, 100vw"
+        className="aspect-[3/2]"
+      />
       {fotos.length > 1 && (
         <div className="grid grid-cols-4 gap-2" role="group" aria-label="Más fotos">
           {fotos.map((foto, i) => (
             <button
-              key={foto}
+              key={foto.src ?? foto.alt}
               type="button"
               aria-pressed={i === activa}
-              aria-label={`Ver foto: ${foto}`}
+              aria-label={`Ver foto: ${foto.alt}`}
               onClick={() => setActiva(i)}
               className={`rounded-card border-2 transition-colors duration-200 ${i === activa ? "border-verde" : "border-transparent hover:border-niebla"}`}
             >
-              <FotoPendiente descripcion={foto} className="aspect-[4/3] p-1 md:p-1" />
+              <Foto
+                miniatura
+                foto={foto}
+                sizes="(min-width: 1024px) 12vw, 25vw"
+                className="aspect-[4/3] p-1 md:p-1"
+              />
             </button>
           ))}
         </div>
@@ -123,7 +135,8 @@ export function CompraServicio({ servicio, fechasIniciales, unidadesIniciales }:
       slug: servicio.slug,
       nombre: servicio.nombre,
       unidadPrecio: servicio.unidadPrecio,
-      foto: servicio.fotos[0] ?? servicio.nombre,
+      foto: servicio.fotos[0]?.alt ?? servicio.nombre,
+      fotoSrc: servicio.fotos[0]?.src,
       fecha: servicio.tipoStock === "cupos" ? fecha : null,
       turno: servicio.turnos.length > 0 ? turno : null,
       cantidad: Math.min(cantidad, maximo),

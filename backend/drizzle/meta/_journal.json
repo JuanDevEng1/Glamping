@@ -64,6 +64,13 @@
       "when": 1793134777041,
       "tag": "0008_living_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793738429684,
+      "tag": "0009_nosy_katie_power",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,7 @@ import { CATEGORIAS, UNIDADES_PRECIO, type Categoria } from "@lauburu/backend/se
 import { Container } from "@/components/Container";
 import { Precio } from "@/components/Moneda";
 import { VincularReserva } from "@/components/servicios/VincularReserva";
-import { Chip, FotoPendiente, Proximamente, Tarjeta, claseBoton } from "@/components/ui";
+import { Chip, Foto, Proximamente, Tarjeta, claseBoton } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Servicios",
@@ -95,7 +95,11 @@ export default async function Servicios({
           {lista.map((s) => (
             <li key={s.id}>
               <Tarjeta borde="miel" className="flex flex-col">
-                <FotoPendiente descripcion={s.foto} className="aspect-[3/2]" />
+                <Foto
+                  foto={s.foto}
+                  sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                  className="aspect-[3/2]"
+                />
                 <div className="mt-4 flex items-center justify-between gap-2">
                   <p className="text-overline font-medium text-terracota-oscuro uppercase">
                     {CATEGORIAS[s.categoria]}

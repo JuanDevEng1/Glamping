@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck, Copy, IdCard, Info, Upload } from "lucide-react";
-import type { ResultadoDocumento } from "@lauburu/backend/reservas";
+import { CircleCheck, Copy, IdCard, Info, ShieldCheck, Upload } from "lucide-react";
+import type { DepositoPublico, ResultadoDocumento } from "@lauburu/backend/reservas";
 import { subirDocumento } from "@/app/reservas/acciones";
 import { Tarjeta, claseBoton } from "@/components/ui";
+import { formatoFecha, formatoPrecio } from "@/lib/formato";
 import { Campo } from "./FlujoReserva";
 
 export function CopiarCodigo({ codigo }: { codigo: string }) {
@@ -40,6 +41,76 @@ export function RefrescoAutomatico({ hasta }: { hasta: string }) {
     return () => clearInterval(id);
   }, [hasta, router]);
   return null;
+}
+
+/** Fecha YYYY-MM-DD en Bogotá de un instante ISO. */
+function fechaBogota(iso: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date(iso));
+}
+
+/**
+ * Estado del depósito de garantía, que el huésped autorizó en el paso de pago. Aquí solo se
+ * muestra: los cambios llegan por webhook (PayPal) o por la respuesta de Openpay.
+ */
+export function DepositoGarantia({ deposito }: { deposito: DepositoPublico }) {
+  // Mientras se verifica, se refresca hasta 2 minutos (el webhook suele tardar segundos).
+  const [hastaRefresco] = useState(() => new Date(Date.now() + 120_000).toISOString());
+  const { estado, montoCop } = deposito;
+  const conOpenpay = deposito.pasarela === "openpay";
+  const monto = formatoPrecio(montoCop, "COP", null);
+
+  // Reservas anteriores a este flujo, o un intento que no llegó a autorizarse.
+  if (estado === "sin_iniciar") return null;
+
+  const titulo = (
+    <h2 className="flex items-center gap-2 font-serif text-h3 text-verde">
+      {estado === "autorizado" ? (
+        <CircleCheck size={24} strokeWidth={1.5} aria-hidden />
+      ) : (
+        <ShieldCheck size={24} strokeWidth={1.5} aria-hidden />
+      )}
+      {estado === "autorizado" ? "Depósito de garantía autorizado" : "Depósito de garantía"}
+    </h2>
+  );
+
+  if (estado === "autorizado") {
+    return (
+      <Tarjeta borde="miel">
+        {titulo}
+        <p className="mt-2 max-w-[65ch]">
+          Tenemos apartados {monto} {conOpenpay ? "en tu tarjeta" : "en tu cuenta de PayPal"}. No
+          es un cobro: si al salir todo queda en orden, lo liberamos, y si hay daños cobramos solo
+          lo necesario para repararlos y te contamos.
+          {deposito.venceEn &&
+            ` Tu banco libera la retención solo hacia el ${formatoFecha(fechaBogota(deposito.venceEn))}, aunque tu estadía sea después.`}
+        </p>
+      </Tarjeta>
+    );
+  }
+
+  if (estado === "verificando") {
+    return (
+      <Tarjeta>
+        {titulo}
+        <p className="mt-2 max-w-[65ch]" role="status">
+          Estamos verificando tu depósito con {conOpenpay ? "Openpay" : "PayPal"}. Esta sección se
+          actualiza sola.
+        </p>
+        <RefrescoAutomatico hasta={hastaRefresco} />
+      </Tarjeta>
+    );
+  }
+
+  return (
+    <Tarjeta>
+      {titulo}
+      <p className="mt-2 max-w-[65ch]">
+        {estado === "liberado"
+          ? "La retención de tu depósito ya se liberó. ¡Gracias por cuidar Lauburu!"
+          : "Usamos tu depósito para cubrir daños de la visita. Si tienes preguntas, escríbenos y te contamos el detalle."}
+      </p>
+    </Tarjeta>
+  );
 }
 
 // Mismo límite que MAX_BYTES_DOCUMENTO en el backend, que es quien valida de verdad.

@@ -10,11 +10,8 @@ export const sitio = {
   rnt: "Pendiente",
 } as const;
 
-// Las 3 vistas de la propuesta. "Reservar" es el botón primario del header.
-export const navegacion = [
-  { href: "/", texto: "Nosotros" },
-  { href: "/servicios", texto: "Servicios" },
-] as const;
+// Las 2 vistas de la propuesta. "Reservar" es el botón primario del header.
+export const navegacion = [{ href: "/", texto: "Nosotros" }] as const;
 
 // Secciones de la página Nosotros (anclas en "/").
 export const secciones = [

@@ -4,7 +4,6 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { trmParaCobro } from "@lauburu/backend/moneda";
 import { MonedaProvider } from "@/components/Moneda";
-import { CarritoProvider } from "@/components/servicios/Carrito";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import "./globals.css";
 
@@ -47,14 +46,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           Saltar al contenido
         </a>
         <MonedaProvider trm={trm}>
-          <CarritoProvider>
-            <Header />
-            <main id="contenido" className="flex-1">
-              {children}
-            </main>
-            <Footer />
-            <WhatsAppButton />
-          </CarritoProvider>
+          <Header />
+          <main id="contenido" className="flex-1">
+            {children}
+          </main>
+          <Footer />
+          <WhatsAppButton />
         </MonedaProvider>
       </body>
     </html>

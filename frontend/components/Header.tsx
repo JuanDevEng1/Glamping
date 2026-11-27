@@ -7,7 +7,6 @@ import { Menu, X } from "lucide-react";
 import { Container } from "./Container";
 import { SelectorMoneda } from "./Moneda";
 import { claseBoton } from "./ui";
-import { BotonCarrito } from "./servicios/Carrito";
 import { navegacion, secciones } from "@/lib/sitio";
 
 const enlaceMenu =
@@ -71,7 +70,6 @@ export function Header() {
 
         <div className="flex items-center gap-2 lg:gap-4">
           <SelectorMoneda className="hidden lg:inline-flex" />
-          <BotonCarrito />
           <Link href="/reservas" className={claseBoton("primario", "compacto")}>
             Reservar
           </Link>

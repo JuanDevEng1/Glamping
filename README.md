@@ -1,6 +1,6 @@
 # Lauburu Glamping
 
-Sitio web de reservas para Lauburu Glamping (Manizales, Colombia): un solo alojamiento para hasta 6 huéspedes, con calendario de precios, reservas en línea y venta de servicios adicionales (tours, planes en fincas, gastronomía, decoración y transporte).
+Sitio web de reservas para Lauburu Glamping (Manizales, Colombia): un solo alojamiento para hasta 6 huéspedes, con calendario de precios, reservas en línea y venta de servicio adicional (cabalgata).
 
 ## Stack
 
@@ -10,12 +10,12 @@ Next.js 15 (App Router) · TypeScript estricto · Tailwind v4 · PostgreSQL + Dr
 
 Monorepo con npm workspaces y un solo despliegue:
 
-| Ruta | Contenido |
-| --- | --- |
-| [`frontend/`](frontend/README.md) | `@lauburu/frontend`: app Next.js con páginas, componentes y rutas `app/api/*` delgadas. Aquí vive `.env.local`. |
-| [`backend/`](backend/README.md) | `@lauburu/backend`: lógica de negocio sin servidor propio. Esquema y BD, precios, reservas, servicios, migraciones y pruebas. |
-| `*.html` | Prototipos estáticos de diseño (servicios, detalle de servicio y carrito). No forman parte de la app. |
-| `CLAUDE.md` | Reglas de trabajo, de negocio y de seguridad del proyecto. |
+| Ruta                               | Contenido                                                                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`frontend/`](frontend/README.md) | `@lauburu/frontend`: app Next.js con páginas, componentes y rutas `app/api/*` delgadas. Aquí vive `.env.local`.         |
+| [`backend/`](backend/README.md)   | `@lauburu/backend`: lógica de negocio sin servidor propio. Esquema y BD, precios, reservas, servicio, migraciones y pruebas. |
+| `*.html`                         | Prototipos estáticos de diseño (servicio, detalle de servicio y carrito). No forman parte de la app.                          |
+| `CLAUDE.md`                      | Reglas de trabajo, de negocio y de seguridad del proyecto.                                                                      |
 
 ## Puesta en marcha
 
@@ -31,15 +31,15 @@ npm run dev                                     # http://localhost:3000
 
 ## Comandos
 
-| Comando | Qué hace |
-| --- | --- |
-| `npm run dev` | Servidor de desarrollo. |
-| `npm run build` / `npm run start` | Build de producción y servidor. |
-| `npm run lint` | ESLint del frontend y typecheck del backend. |
-| `npm run test` | Pruebas Vitest del backend. |
-| `npm run format` | Prettier sobre todo el repo. |
-| `npm run db:generate` | Genera una migración a partir del esquema. |
-| `npm run db:migrate` | Aplica las migraciones pendientes. |
+| Comando                                           | Qué hace                                             |
+| ------------------------------------------------- | ----------------------------------------------------- |
+| `npm run dev`                                   | Servidor de desarrollo.                               |
+| `npm run build` / `npm run start`             | Build de producción y servidor.                      |
+| `npm run lint`                                  | ESLint del frontend y typecheck del backend.          |
+| `npm run test`                                  | Pruebas Vitest del backend.                           |
+| `npm run format`                                | Prettier sobre todo el repo.                          |
+| `npm run db:generate`                           | Genera una migración a partir del esquema.           |
+| `npm run db:migrate`                            | Aplica las migraciones pendientes.                    |
 | `npm run db:seed` / `npm run db:seed:ejemplo` | Festivos de Colombia / festivos más datos de prueba. |
 
 `lint`, `test` y `build` deben pasar antes de integrar cambios.

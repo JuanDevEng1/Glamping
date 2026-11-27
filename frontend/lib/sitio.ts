@@ -1,5 +1,6 @@
 // Datos del negocio que se muestran en header, footer y botón de WhatsApp.
-// TODO(cliente): confirmar número de WhatsApp, correo, Instagram y RNT antes de publicar.
+// TODO(cliente): confirmar número de WhatsApp, correo e Instagram antes de publicar.
+// RNT: certificado de la Cámara de Comercio de Manizales, vence el 31 de marzo de 2027.
 export const sitio = {
   nombre: "Lauburu Glamping",
   descriptiva: "GLAMPING · MANIZALES",
@@ -7,14 +8,11 @@ export const sitio = {
   whatsapp: "570000000000", // formato internacional sin "+" ni espacios
   correo: "lauburuglamping@gmail.com",
   instagram: "https://www.instagram.com/",
-  rnt: "Pendiente",
+  rnt: "307689",
 } as const;
 
-// Las 3 vistas de la propuesta. "Reservar" es el botón primario del header.
-export const navegacion = [
-  { href: "/", texto: "Nosotros" },
-  { href: "/servicios", texto: "Servicios" },
-] as const;
+// Las 2 vistas de la propuesta. "Reservar" es el botón primario del header.
+export const navegacion = [{ href: "/", texto: "Nosotros" }] as const;
 
 // Secciones de la página Nosotros (anclas en "/").
 export const secciones = [

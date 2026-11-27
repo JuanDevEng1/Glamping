@@ -101,6 +101,8 @@ export type Estadia = {
 export type Cotizacion = {
   ok: true;
   noches: Noche[];
+  /** Grupo base. */
+  huespedes: number;
   personasExtra: number;
   subtotal: number;
   extraPersonas: number;
@@ -114,9 +116,65 @@ export type Cotizacion = {
   /** Por mascota y por noche. */
   precioMascota: number;
   extraMascotas: number;
+  /**
+   * Base del descuento: subtotal + extraPersonas + extraAdicionales. Las mascotas y la
+   * cabalgata no llevan descuento.
+   */
+  baseDescuento: number;
+  /** Solo sobre baseDescuento. */
+  descuento: Descuento | null;
+  cabalgata: Cabalgata | null;
+  /** Lo que se cobra: baseDescuento − descuento + extraMascotas + cabalgata. */
   total: number;
   moneda: "COP";
 };
+
+/** Cabalgata para todo el grupo: un caballo por persona (sin los menores de 4 años). */
+export type Cabalgata = {
+  servicioId: number;
+  nombre: string;
+  fecha: string;
+  /** "HH:MM", o "" si el servicio no tiene turnos. */
+  turno: string;
+  personas: number;
+  precioPersona: number;
+  subtotal: number;
+};
+
+/** `servicio` es el slug de la cabalgata; `turno` es "" si no tiene turnos. */
+export type EleccionCabalgata = { servicio: string; fecha: string; turno: string };
+
+/** Una cabalgata y sus cupos para la estadía. */
+export type DatosCabalgata = {
+  servicioId: number;
+  nombre: string;
+  /** Por caballo; va uno por persona. */
+  precioPersona: number;
+  /** [""] si el servicio no tiene turnos. */
+  turnos: string[];
+  /** "HH:MM" o "HH:MM:SS". */
+  horaCheckin: string;
+  horaCheckout: string;
+  /** Cupos libres por `${fecha}|${turno}`, ya descontadas las otras reservas activas. */
+  libres: Map<string, number>;
+};
+
+export type Descuento = { codigo: string; porcentaje: number; monto: number };
+
+/** Código de descuento tal como se guarda, más sus usos actuales (reservas activas que lo llevan). */
+export type CodigoDescuento = {
+  codigo: string;
+  porcentaje: number;
+  activo: boolean;
+  validoDesde: string | null;
+  validoHasta: string | null;
+  estadiaDesde: string | null;
+  estadiaHasta: string | null;
+  usosMaximos: number | null;
+  usos: number;
+};
+
+export type MotivoCodigoInvalido = "inexistente" | "vencido" | "agotado" | "fechas";
 
 export type ErrorCotizacion = {
   ok: false;
@@ -126,9 +184,13 @@ export type ErrorCotizacion = {
     | "adicionales_invalidos"
     | "mascotas_invalidas"
     | "minimo_noches"
-    | "no_disponible";
+    | "no_disponible"
+    | "codigo_invalido"
+    | "cabalgata_invalida"
+    | "cabalgata_sin_cupo";
   minimo?: number;
   fecha?: string;
+  motivo?: MotivoCodigoInvalido;
 };
 
 export type EstadoDia = "disponible" | "ocupado" | "bloqueado" | "pasado";
@@ -276,9 +338,11 @@ export function cotizar(
       adicionales.ninos * config.precioAdicionalNino);
   const extraMascotas = cantidad * mascotas * config.precioMascota;
 
+  const baseDescuento = subtotal + extraPersonas + extraAdicionales;
   return {
     ok: true,
     noches,
+    huespedes,
     personasExtra,
     subtotal,
     extraPersonas,
@@ -289,9 +353,156 @@ export function cotizar(
     mascotas,
     precioMascota: config.precioMascota,
     extraMascotas,
-    total: subtotal + extraPersonas + extraAdicionales + extraMascotas,
+    baseDescuento,
+    descuento: null,
+    cabalgata: null,
+    total: baseDescuento + extraMascotas,
     moneda: "COP",
   };
+}
+
+/** Total a cobrar a partir de sus partes; así descuento y cabalgata se aplican en cualquier orden. */
+function conTotal(cot: Cotizacion): Cotizacion {
+  return {
+    ...cot,
+    total:
+      cot.baseDescuento -
+      (cot.descuento?.monto ?? 0) +
+      cot.extraMascotas +
+      (cot.cabalgata?.subtotal ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Códigos de descuento
+// ---------------------------------------------------------------------------
+
+/**
+ * Aplica un código de descuento a una cotización válida. `codigo` null = el código no existe.
+ * El porcentaje se aplica sobre el total (noches, personas extra y adicionales) y se redondea
+ * al peso. Un código vale si está activo, `hoy` está en su vigencia, le quedan usos y todas las
+ * noches caen en su rango de estadía.
+ */
+export function aplicarDescuento(
+  cot: Cotizacion,
+  codigo: CodigoDescuento | null,
+  hoy: string,
+): Cotizacion | ErrorCotizacion {
+  const invalido = (motivo: MotivoCodigoInvalido): ErrorCotizacion => ({
+    ok: false,
+    error: "codigo_invalido",
+    motivo,
+  });
+  if (!codigo) return invalido("inexistente");
+  if (
+    !codigo.activo ||
+    (codigo.validoDesde !== null && hoy < codigo.validoDesde) ||
+    (codigo.validoHasta !== null && hoy > codigo.validoHasta)
+  ) {
+    return invalido("vencido");
+  }
+  if (codigo.usosMaximos !== null && codigo.usos >= codigo.usosMaximos) return invalido("agotado");
+  const fuera = cot.noches.some(
+    (n) =>
+      (codigo.estadiaDesde !== null && n.fecha < codigo.estadiaDesde) ||
+      (codigo.estadiaHasta !== null && n.fecha > codigo.estadiaHasta),
+  );
+  if (fuera) return invalido("fechas");
+
+  const monto = Math.round((cot.baseDescuento * codigo.porcentaje) / 100);
+  return conTotal({
+    ...cot,
+    descuento: { codigo: codigo.codigo, porcentaje: codigo.porcentaje, monto },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cabalgata (todo el grupo o nadie)
+// ---------------------------------------------------------------------------
+
+/** Personas que montan: el grupo base y los adultos y niños adicionales (los menores de 4, no). */
+export function personasCabalgata(huespedes: number, adicionales: Adicionales = SIN_ADICIONALES) {
+  return huespedes + adicionales.adultos + adicionales.ninos;
+}
+
+/**
+ * Un turno sirve si cae entre la llegada y la salida (ambas inclusive): el día de llegada,
+ * desde la hora de check-in; el de salida, antes del check-out. Sin turno ("") vale cualquier día
+ * de la estadía.
+ */
+export function turnoEnEstadia(
+  fecha: string,
+  turno: string,
+  llegada: string,
+  salida: string,
+  datos: Pick<DatosCabalgata, "horaCheckin" | "horaCheckout">,
+) {
+  if (fecha < llegada || fecha > salida) return false;
+  if (turno === "") return true;
+  if (fecha === llegada && turno < datos.horaCheckin.slice(0, 5)) return false;
+  if (fecha === salida && turno >= datos.horaCheckout.slice(0, 5)) return false;
+  return true;
+}
+
+export type OpcionCabalgata = {
+  fecha: string;
+  turnos: { turno: string; libres: number; alcanza: boolean }[];
+};
+
+/** Días y turnos de la estadía en que se ofrece la cabalgata, con sus cupos libres. */
+export function opcionesCabalgata(
+  llegada: string,
+  salida: string,
+  personas: number,
+  datos: DatosCabalgata,
+): OpcionCabalgata[] {
+  const opciones: OpcionCabalgata[] = [];
+  for (let fecha = llegada; fecha <= salida; fecha = sumarDias(fecha, 1)) {
+    const turnos = datos.turnos
+      .filter((t) => turnoEnEstadia(fecha, t, llegada, salida, datos))
+      .map((turno) => {
+        const libres = datos.libres.get(`${fecha}|${turno}`) ?? 0;
+        return { turno, libres, alcanza: libres >= personas };
+      });
+    if (turnos.length > 0) opciones.push({ fecha, turnos });
+  }
+  return opciones;
+}
+
+/** Agrega la cabalgata del grupo a una cotización válida. No la toca el descuento. */
+export function agregarCabalgata(
+  cot: Cotizacion,
+  eleccion: EleccionCabalgata,
+  datos: DatosCabalgata,
+): Cotizacion | ErrorCotizacion {
+  const llegada = cot.noches[0]?.fecha;
+  const ultima = cot.noches.at(-1)?.fecha;
+  if (!llegada || !ultima) return { ok: false, error: "cabalgata_invalida" };
+  const salida = sumarDias(ultima, 1);
+  const { fecha, turno } = eleccion;
+  if (
+    !esFechaValida(fecha) ||
+    !datos.turnos.includes(turno) ||
+    !turnoEnEstadia(fecha, turno, llegada, salida, datos)
+  ) {
+    return { ok: false, error: "cabalgata_invalida" };
+  }
+  const personas = personasCabalgata(cot.huespedes, cot.adicionales);
+  if (personas > (datos.libres.get(`${fecha}|${turno}`) ?? 0)) {
+    return { ok: false, error: "cabalgata_sin_cupo" };
+  }
+  return conTotal({
+    ...cot,
+    cabalgata: {
+      servicioId: datos.servicioId,
+      nombre: datos.nombre,
+      fecha,
+      turno,
+      personas,
+      precioPersona: datos.precioPersona,
+      subtotal: personas * datos.precioPersona,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

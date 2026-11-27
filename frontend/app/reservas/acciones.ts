@@ -7,6 +7,7 @@ import { DEMASIADAS_PETICIONES } from "@lauburu/backend/db";
 import {
   cotizarEstadia,
   crearReservaPendiente,
+  obtenerCabalgata,
   liberarReservaPendiente,
   recibirDocumentoReserva,
 } from "@lauburu/backend/reservas";
@@ -27,12 +28,22 @@ type Estadia = {
   salida: string;
   huespedes: number;
   adicionales?: { adultos: number; ninos: number; menores: number };
+  /** Código de descuento: el servidor lo valida y calcula el descuento. */
+  codigo?: string;
+  /** Cabalgata para todo el grupo: el servidor valida el cupo y pone el precio. */
+  cabalgata?: { servicio: string; fecha: string; turno: string };
   mascotas?: number;
 };
 
 export async function cotizar(estadia: Estadia) {
   if (!(await dentroDelLimite("cotizar", "consulta"))) return DEMASIADAS_PETICIONES;
   return cotizarEstadia(estadia);
+}
+
+/** Cabalgatas para la estadía. Con demasiadas peticiones devuelve null (no se ofrecen). */
+export async function cabalgataDeEstadia(estadia: Estadia) {
+  if (!(await dentroDelLimite("cabalgata", "consulta"))) return null;
+  return obtenerCabalgata(estadia);
 }
 
 export async function crearReserva(estadia: Estadia, huesped: Record<string, unknown>) {

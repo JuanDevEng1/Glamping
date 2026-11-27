@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleCheck, Clock, Home, Info, MapPin, PlusCircle } from "lucide-react";
+import { CircleCheck, Clock, Home, Info, MapPin } from "lucide-react";
 import { obtenerConfiguracion } from "@lauburu/backend/db";
 import { obtenerReservaPublica } from "@lauburu/backend/reservas";
 import { detalleAdicionales, diasEntre, textoPersonas } from "@lauburu/backend/precios";
@@ -14,7 +14,7 @@ import {
 } from "@/components/reserva/Confirmacion";
 import { PasosReserva } from "@/components/reserva/FlujoReserva";
 import { FotoPendiente, Tarjeta, claseBoton } from "@/components/ui";
-import { formatoFecha, formatoHora, formatoPrecio } from "@/lib/formato";
+import { formatoFecha, formatoFechaCorta, formatoHora, formatoPrecio } from "@/lib/formato";
 import { enlaceWhatsApp } from "@/lib/sitio";
 
 // Paso 5. Solo muestra "confirmada" si la BD lo dice: el estado lo cambia únicamente el
@@ -36,11 +36,14 @@ export default async function ConfirmacionReserva({
     obtenerReservaPublica(codigo),
     obtenerConfiguracion(),
   ]);
-  if (!reserva) notFound();
+  // Un bloqueo de mantenimiento no es una reserva de un huésped: no tiene página.
+  if (!reserva || reserva.origen === "mantenimiento") notFound();
 
   const noches = diasEntre(reserva.fechaLlegada, reserva.fechaSalida);
   const confirmada = reserva.estado === "confirmada";
   const pendiente = reserva.estado === "pendiente";
+  /** Cortesía o rifa: la crea el admin, sin pago. */
+  const regalo = reserva.origen !== "web";
 
   return (
     <section aria-labelledby="confirmacion-titulo" className="py-12 md:py-16">
@@ -78,11 +81,13 @@ export default async function ConfirmacionReserva({
                     : "Esta reserva no se completó"}
               </h1>
               <p className="mx-auto mt-4 max-w-[65ch]">
-                {confirmada
-                  ? `Te enviamos la confirmación y los términos a ${reserva.correo}.`
-                  : pendiente
-                    ? "En cuanto la pasarela apruebe el pago, esta página se actualiza sola. No necesitas pagar de nuevo."
-                    : "El tiempo para pagar terminó o la reserva se canceló, y las fechas quedaron libres."}
+                {confirmada && regalo
+                  ? "Esta estadía es un regalo de Lauburu: no tienes nada que pagar. Guarda tu código de reserva."
+                  : confirmada
+                    ? `Te enviamos la confirmación y los términos a ${reserva.correo}.`
+                    : pendiente
+                      ? "En cuanto la pasarela apruebe el pago, esta página se actualiza sola. No necesitas pagar de nuevo."
+                      : "El tiempo para pagar terminó o la reserva se canceló, y las fechas quedaron libres."}
               </p>
               {pendiente && <RefrescoAutomatico hasta={reserva.expiraEn} />}
               {!confirmada && !pendiente && (
@@ -108,9 +113,7 @@ export default async function ConfirmacionReserva({
               <SubirDocumento codigo={reserva.codigo} recibido={reserva.documentoRecibido} />
             )}
 
-            {confirmada && reserva.deposito && (
-              <DepositoGarantia deposito={reserva.deposito} />
-            )}
+            {confirmada && reserva.deposito && <DepositoGarantia deposito={reserva.deposito} />}
 
             {/* Resumen */}
             <Tarjeta>
@@ -149,12 +152,28 @@ export default async function ConfirmacionReserva({
                       </dd>
                     )}
                   </div>
+                  {reserva.cabalgata && (
+                    <div>
+                      <dt className="font-medium text-verde">{reserva.cabalgata.nombre}</dt>
+                      <dd>
+                        {formatoFechaCorta(reserva.cabalgata.fecha)}
+                        {reserva.cabalgata.turno && `, ${formatoHora(reserva.cabalgata.turno)}`}
+                      </dd>
+                      <dd>
+                        {reserva.cabalgata.personas}{" "}
+                        {reserva.cabalgata.personas === 1 ? "caballo" : "caballos"} ·{" "}
+                        {formatoPrecio(reserva.cabalgata.totalCop, "COP", null)}
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="font-medium text-verde">
-                      {confirmada ? "Valor pagado" : "Valor de la reserva"}
+                      {regalo ? "Valor" : confirmada ? "Valor pagado" : "Valor de la reserva"}
                     </dt>
                     <dd className="font-bold text-verde">
-                      {formatoPrecio(reserva.totalCop, "COP", null)}
+                      {regalo
+                        ? "Cortesía de Lauburu"
+                        : formatoPrecio(reserva.totalCop, "COP", null)}
                     </dd>
                   </div>
                 </dl>
@@ -170,14 +189,6 @@ export default async function ConfirmacionReserva({
                 <Link href="/#como-llegar" className={`${claseBoton("secundario")} w-full`}>
                   <MapPin size={20} strokeWidth={1.5} aria-hidden /> Cómo llegar
                 </Link>
-                {confirmada && (
-                  <Link
-                    href={`/servicios?reserva=${reserva.codigo}`}
-                    className={`${claseBoton("secundario")} w-full`}
-                  >
-                    <PlusCircle size={20} strokeWidth={1.5} aria-hidden /> Agregar servicios
-                  </Link>
-                )}
                 <Link href="/" className={`${claseBoton("secundario")} w-full`}>
                   <Home size={20} strokeWidth={1.5} aria-hidden /> Volver al inicio
                 </Link>

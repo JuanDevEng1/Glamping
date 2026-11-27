@@ -1,5 +1,5 @@
 // Carga los festivos, las temporadas altas y las fechas especiales de Colombia 2026–2028 sin
-// sobrescribir lo que ya exista, y el catálogo real de servicios (cabalgatas) con sus cupos.
+// sobrescribir lo que ya exista, y el catálogo real de cabalgatas.
 // Con --ejemplo también crea la configuración de tarifas DE PRUEBA.
 // Uso: npm run db:seed            ·  npm run db:seed:ejemplo
 import { eq, like } from "drizzle-orm";
@@ -7,19 +7,16 @@ import {
   ajustesFecha,
   aliados,
   configuracion,
-  cuposServicio,
   festivos,
   getDb,
   servicios,
   temporadas,
   type Foto,
 } from "../src/db";
-import { hoyEnBogota } from "../src/moneda";
 import {
   calcularFechasEspeciales,
   calcularFestivos,
   calcularTemporadasAltas,
-  sumarDias,
 } from "../src/precios";
 
 try {
@@ -71,11 +68,11 @@ await db.$client.end();
 
 // ---------------------------------------------------------------------------
 // Catálogo real: cabalgatas que opera el glamping. Idempotente (upsert por slug).
-// Los cupos se crean DIAS_CUPOS días hacia adelante: vuelve a correr la semilla para extenderlos.
+// Los caballos por día salen de servicios.capacidadTurno (6 por defecto) y no se cargan fechas:
+// para cerrar un día o cambiar la capacidad, npm run admin -- cabalgata cerrar|capacidad.
 // ---------------------------------------------------------------------------
 
 async function sembrarCabalgatas() {
-  const DIAS_CUPOS = 90;
   const CABALLOS = 6;
 
   const correo = (process.env.CORREO_ADMIN ?? "").split(",")[0]?.trim();
@@ -163,31 +160,15 @@ async function sembrarCabalgatas() {
     },
   ];
 
-  const ids: number[] = [];
   for (const { slug, ...datos } of cabalgatas) {
-    const [fila] = await db
+    await db
       .insert(servicios)
       .values({ slug, ...datos })
-      .onConflictDoUpdate({ target: servicios.slug, set: datos })
-      .returning({ id: servicios.id });
-    ids.push(fila!.id);
+      .onConflictDoUpdate({
+        target: servicios.slug,
+        set: datos,
+      });
   }
 
-  // Los cupos existentes no se tocan, para no perder lo ya reservado.
-  const hoy = hoyEnBogota();
-  await db
-    .insert(cuposServicio)
-    .values(
-      ids.flatMap((servicioId) =>
-        Array.from({ length: DIAS_CUPOS }, (_, i) => ({
-          servicioId,
-          fecha: sumarDias(hoy, i),
-          turno: "",
-          capacidad: CABALLOS,
-        })),
-      ),
-    )
-    .onConflictDoNothing();
-
-  console.log(`Cabalgatas listas, con cupos para ${DIAS_CUPOS} días.`);
+  console.log("Cabalgatas listas.");
 }

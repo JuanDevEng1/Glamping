@@ -71,6 +71,13 @@
       "when": 1793738429684,
       "tag": "0009_nosy_katie_power",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795755464845,
+      "tag": "0010_icy_solo",
+      "breakpoints": true
     }
   ]
 }

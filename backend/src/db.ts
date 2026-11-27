@@ -107,7 +107,40 @@ export const ajustesFecha = pgTable("ajustes_fecha", {
   motivo: text(),
 });
 
+/**
+ * Códigos de descuento por porcentaje (solo reservas del glamping). Se crean con
+ * `npm run admin -- codigo crear`. Los usos se cuentan sobre las reservas activas que lo llevan.
+ */
+export const codigosDescuento = pgTable(
+  "codigos_descuento",
+  {
+    id: serial().primaryKey(),
+    /** En mayúsculas. */
+    codigo: text().notNull().unique(),
+    /** 1 a 90: el total debe quedar > 0 para cobrarlo. Una estadía gratis es una cortesía. */
+    porcentaje: integer().notNull(),
+    activo: boolean().notNull().default(true),
+    /** Días (en Bogotá) en que se puede usar, ambos inclusive. */
+    validoDesde: date({ mode: "string" }),
+    validoHasta: date({ mode: "string" }),
+    /** Todas las noches de la estadía deben caer en este rango, ambos inclusive. */
+    estadiaDesde: date({ mode: "string" }),
+    estadiaHasta: date({ mode: "string" }),
+    usosMaximos: integer(),
+    descripcion: text(),
+    creadoEn: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("codigos_descuento_porcentaje", sql`${t.porcentaje} between 1 and 90`),
+    check("codigos_descuento_usos", sql`${t.usosMaximos} is null or ${t.usosMaximos} >= 1`),
+    check("codigos_descuento_mayusculas", sql`${t.codigo} = upper(${t.codigo})`),
+  ],
+);
+
 export const ESTADOS_RESERVA = ["pendiente", "confirmada", "cancelada", "expirada"] as const;
+
+/** web = reserva pagada en el sitio; el resto las crea el admin sin pago. */
+export const ORIGENES_RESERVA = ["web", "cortesia", "rifa", "mantenimiento"] as const;
 
 /**
  * Reservas. La restricción anti doble reserva (EXCLUDE sobre daterange) está en la
@@ -128,7 +161,22 @@ export const reservas = pgTable(
     /** Menores de 4 años (no pagan). */
     menoresAdicionales: integer().notNull().default(0),
     estado: text({ enum: ESTADOS_RESERVA }).notNull().default("pendiente"),
+    origen: text({ enum: ORIGENES_RESERVA }).notNull().default("web"),
+    /** Motivo de una reserva del admin (rifa, cortesía, mantenimiento). */
+    notaAdmin: text(),
+    /** Total a cobrar, ya con el descuento aplicado. */
     totalCop: integer().notNull(),
+    codigoDescuentoId: integer().references(() => codigosDescuento.id),
+    descuentoCop: integer().notNull().default(0),
+    /**
+     * Cabalgata para todo el grupo (opcional). Sus cupos se ocupan mientras la reserva está
+     * activa (confirmada o con hold vigente); `cabalgataCop` ya va incluido en `totalCop`.
+     */
+    cabalgataFecha: date({ mode: "string" }),
+    /** "HH:MM", o "" si el servicio no tiene turnos. */
+    cabalgataTurno: text(),
+    cabalgataPersonas: integer().notNull().default(0),
+    cabalgataCop: integer().notNull().default(0),
     desglose: jsonb().$type<Noche[]>().notNull(),
     nombre: text().notNull(),
     correo: text().notNull(),
@@ -156,6 +204,12 @@ export const reservas = pgTable(
     check(
       "reservas_estado",
       sql`${t.estado} in ('pendiente', 'confirmada', 'cancelada', 'expirada')`,
+    ),
+    check("reservas_origen", sql`${t.origen} in ('web', 'cortesia', 'rifa', 'mantenimiento')`),
+    check("reservas_descuento", sql`${t.descuentoCop} >= 0`),
+    check(
+      "reservas_cabalgata",
+      sql`(${t.cabalgataFecha} is null and ${t.cabalgataTurno} is null and ${t.cabalgataPersonas} = 0 and ${t.cabalgataCop} = 0) or (${t.cabalgataFecha} is not null and ${t.cabalgataTurno} is not null and ${t.cabalgataPersonas} > 0 and ${t.cabalgataCop} >= 0)`,
     ),
   ],
 );
@@ -190,6 +244,11 @@ export const servicios = pgTable(
     tipoStock: text({ enum: ["cupos", "unidades"] }).notNull(),
     /** Solo para tipoStock = unidades. Se descuenta al confirmar el pago. */
     stock: integer(),
+    /**
+     * Cabalgata: personas por turno, todos los días. Una fila de `cupos_servicio` para esa
+     * fecha y turno la reemplaza (0 = cerrado).
+     */
+    capacidadTurno: integer().notNull().default(6),
     maxPorPedido: integer().notNull().default(4),
     incluidoOExtra: text({ enum: ["incluido", "extra"] })
       .notNull()
@@ -209,11 +268,15 @@ export const servicios = pgTable(
   (t) => [
     check("servicios_precio", sql`${t.precio} >= 0`),
     check("servicios_stock", sql`${t.stock} is null or ${t.stock} >= 0`),
+    check("servicios_capacidad_turno", sql`${t.capacidadTurno} >= 0`),
     check("servicios_max", sql`${t.maxPorPedido} >= 1`),
   ],
 );
 
-/** Capacidad por fecha y turno ('' = sin turno). `reservados` cuenta solo pedidos pagados. */
+/**
+ * Capacidad por fecha y turno ('' = sin turno). `reservados` cuenta solo pedidos pagados.
+ * Para la cabalgata de la reserva es una excepción a `servicios.capacidadTurno`.
+ */
 export const cuposServicio = pgTable(
   "cupos_servicio",
   {
@@ -345,6 +408,7 @@ export const schema = {
   temporadas,
   festivos,
   ajustesFecha,
+  codigosDescuento,
   reservas,
   aliados,
   servicios,

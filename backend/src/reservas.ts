@@ -1,15 +1,18 @@
 // Reservas: datos de tarifas desde la BD, calendario, cotización y hold (PLAN_DESARROLLO.md §5).
 // Toda entrada se valida con Zod aquí; el precio siempre lo recalcula el servidor con precios.ts.
 import { randomInt } from "node:crypto";
-import { and, eq, gt, gte, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, count, eq, gt, gte, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { correoConfigurado, correosAdmin, enviarCorreo } from "./correos";
 import {
   ajustesFecha,
+  codigosDescuento,
   configuracion,
+  cuposServicio,
   festivos,
   getDb,
   reservas,
+  servicios,
   temporadas,
   type Configuracion,
   type Db,
@@ -17,21 +20,28 @@ import {
 } from "./db";
 import { hoyEnBogota } from "./moneda";
 import {
+  agregarCabalgata,
+  aplicarDescuento,
   calendarioMes,
   cotizar,
   detalleAdicionales,
   diasEntre,
   esFechaValida,
   esMesValido,
+  opcionesCabalgata,
+  personasCabalgata,
   SIN_ADICIONALES,
   sumarDias,
   textoPersonas,
   totalAdicionales,
   type Adicionales,
+  type CodigoDescuento,
   type Cotizacion,
+  type DatosCabalgata,
   type DatosTarifas,
   type DiaCalendario,
   type ErrorCotizacion,
+  type OpcionCabalgata,
 } from "./precios";
 
 // ---------------------------------------------------------------------------
@@ -42,6 +52,13 @@ const fecha = z.string().refine(esFechaValida, { error: "Fecha inválida" });
 
 const cantidad = z.coerce.number().int().min(0).max(20).default(0);
 
+/** Código de descuento: se normaliza a mayúsculas. Vacío = sin código. */
+export const esquemaCodigoDescuento = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9-]{3,30}$/, { error: "Código inválido" });
+
 // Los límites de negocio (máximo de adicionales, grupo base completo) los aplica cotizar().
 export const esquemaEstadia = z.object({
   llegada: fecha,
@@ -50,6 +67,14 @@ export const esquemaEstadia = z.object({
   adicionales: z
     .object({ adultos: cantidad, ninos: cantidad, menores: cantidad })
     .default(SIN_ADICIONALES),
+  // Un código mal escrito no invalida la estadía: cargarCodigo lo trata como inexistente.
+  codigo: z
+    .string()
+    .max(60)
+    .optional()
+    .transform((v) => v?.trim().toUpperCase() || undefined),
+  /** Cabalgata para todo el grupo: el día y el turno; el precio lo pone el servidor. */
+  cabalgata: z.object({ fecha, turno: z.string().regex(/^(\d{2}:\d{2})?$/) }).optional(),
 });
 
 export const TIPOS_DOCUMENTO = {
@@ -102,13 +127,43 @@ export type EntradaHuesped = z.input<typeof esquemaHuesped>;
 // ---------------------------------------------------------------------------
 
 /** Reserva que ocupa sus noches: confirmada, o pendiente con hold vigente. */
-const reservaActiva = or(
+export const reservaActiva = or(
   eq(reservas.estado, "confirmada"),
   and(eq(reservas.estado, "pendiente"), gt(reservas.expiraEn, sql`now()`)),
 );
 
+/** Usos de un código: reservas activas (confirmadas o con hold vigente) que lo llevan. */
+export async function usosCodigo(ej: Db | Tx, codigoId: number) {
+  const [fila] = await ej
+    .select({ usos: count() })
+    .from(reservas)
+    .where(and(eq(reservas.codigoDescuentoId, codigoId), reservaActiva));
+  return fila?.usos ?? 0;
+}
+
+/**
+ * Código de descuento con sus usos actuales, o null si no existe. Con `bloquear`, toma un
+ * bloqueo de fila hasta el fin de la transacción: dos reservas simultáneas con el mismo código
+ * se atienden en fila y no superan `usosMaximos`.
+ */
+async function cargarCodigo(
+  ej: Db | Tx,
+  codigo: string,
+  bloquear = false,
+): Promise<(CodigoDescuento & { id: number }) | null> {
+  if (!esquemaCodigoDescuento.safeParse(codigo).success) return null;
+  const consulta = ej
+    .select()
+    .from(codigosDescuento)
+    .where(eq(codigosDescuento.codigo, codigo))
+    .limit(1);
+  const [fila] = bloquear ? await consulta.for("update") : await consulta;
+  if (!fila) return null;
+  return { ...fila, usos: await usosCodigo(ej, fila.id) };
+}
+
 /** Todo lo que el motor necesita para las noches de `desde` a `hasta` (inclusive). */
-async function cargarDatos(
+export async function cargarDatos(
   ej: Db | Tx,
   desde: string,
   hasta: string,
@@ -188,9 +243,163 @@ export async function cotizarEstadia(entrada: unknown): Promise<ResultadoCotizac
   const { llegada, salida } = parsed.data;
   if (salida <= llegada) return { ok: false, error: "fechas_invalidas" };
   if (!process.env.DATABASE_URL) return { ok: false, error: "sin_configuracion" };
-  const datos = await cargarDatos(getDb(), llegada, sumarDias(salida, -1));
+  const db = getDb();
+  const datos = await cargarDatos(db, llegada, sumarDias(salida, -1));
   if (!datos) return { ok: false, error: "sin_configuracion" };
-  return cotizar(parsed.data, datos, hoyEnBogota());
+  const hoy = hoyEnBogota();
+  const cotizacion = cotizar(parsed.data, datos, hoy);
+  if (!cotizacion.ok) return cotizacion;
+  return (await completarCotizacion(db, cotizacion, parsed.data, datos.config, hoy)).cotizacion;
+}
+
+/**
+ * Aplica el código de descuento y la cabalgata pedidos a una cotización válida. Con
+ * `bloquear` (dentro de la transacción que crea la reserva) toma las filas del código y de la
+ * cabalgata, así dos reservas simultáneas no pasan el límite de usos ni de cupos.
+ */
+async function completarCotizacion(
+  ej: Db | Tx,
+  base: Cotizacion,
+  estadia: z.infer<typeof esquemaEstadia>,
+  config: Configuracion,
+  hoy: string,
+  bloquear = false,
+): Promise<{ cotizacion: Cotizacion | ErrorCotizacion; codigoId: number | null }> {
+  let cotizacion: Cotizacion | ErrorCotizacion = base;
+  let codigoId: number | null = null;
+  if (estadia.codigo) {
+    const codigo = await cargarCodigo(ej, estadia.codigo, bloquear);
+    cotizacion = aplicarDescuento(cotizacion, codigo, hoy);
+    if (!cotizacion.ok) return { cotizacion, codigoId };
+    codigoId = codigo!.id;
+  }
+  if (estadia.cabalgata && cotizacion.ok) {
+    const { llegada, salida } = estadia;
+    const cabalgata = await cargarCabalgata(ej, config, llegada, salida, { bloquear });
+    cotizacion = cabalgata
+      ? agregarCabalgata(cotizacion, estadia.cabalgata, cabalgata.datos)
+      : { ok: false, error: "cabalgata_invalida" };
+  }
+  return { cotizacion, codigoId };
+}
+
+// ---------------------------------------------------------------------------
+// Cabalgata (servicio de la reserva)
+// ---------------------------------------------------------------------------
+
+/** Slug del servicio de cabalgata en la tabla `servicios`. */
+export const SLUG_CABALGATA = "cabalgata-al-mirador";
+
+/**
+ * Servicio de cabalgata activo y sus cupos libres por día y turno entre `desde` y `hasta`
+ * (inclusive): capacidad (la del turno o la excepción de `cupos_servicio`) menos las personas
+ * de las reservas activas que la llevan. Null si no hay cabalgata activa.
+ */
+export async function cargarCabalgata(
+  ej: Db | Tx,
+  config: Pick<Configuracion, "horaCheckin" | "horaCheckout">,
+  desde: string,
+  hasta: string,
+  opciones: { bloquear?: boolean; excluirReservaId?: number } = {},
+) {
+  const consulta = ej
+    .select()
+    .from(servicios)
+    .where(and(eq(servicios.slug, SLUG_CABALGATA), eq(servicios.activo, true)))
+    .limit(1);
+  const [servicio] = opciones.bloquear ? await consulta.for("update") : await consulta;
+  if (!servicio) return null;
+
+  const [excepciones, ocupadas] = await Promise.all([
+    ej
+      .select()
+      .from(cuposServicio)
+      .where(
+        and(
+          eq(cuposServicio.servicioId, servicio.id),
+          gte(cuposServicio.fecha, desde),
+          lte(cuposServicio.fecha, hasta),
+        ),
+      ),
+    ej
+      .select({
+        fecha: reservas.cabalgataFecha,
+        turno: reservas.cabalgataTurno,
+        personas: sql<number>`sum(${reservas.cabalgataPersonas})::int`,
+      })
+      .from(reservas)
+      .where(
+        and(
+          reservaActiva,
+          isNotNull(reservas.cabalgataFecha),
+          gte(reservas.cabalgataFecha, desde),
+          lte(reservas.cabalgataFecha, hasta),
+          opciones.excluirReservaId ? ne(reservas.id, opciones.excluirReservaId) : undefined,
+        ),
+      )
+      .groupBy(reservas.cabalgataFecha, reservas.cabalgataTurno),
+  ]);
+
+  const capacidad = new Map(excepciones.map((e) => [`${e.fecha}|${e.turno}`, e.capacidad]));
+  const ocupado = new Map(ocupadas.map((o) => [`${o.fecha}|${o.turno}`, o.personas]));
+  const turnos = servicio.turnos.length > 0 ? servicio.turnos : [""];
+  const libres = new Map<string, number>();
+  for (let dia = desde; dia <= hasta; dia = sumarDias(dia, 1)) {
+    for (const turno of turnos) {
+      const clave = `${dia}|${turno}`;
+      const total = capacidad.get(clave) ?? servicio.capacidadTurno;
+      libres.set(clave, Math.max(0, total - (ocupado.get(clave) ?? 0)));
+    }
+  }
+  const datos: DatosCabalgata = {
+    precioPersona: servicio.precio,
+    turnos,
+    horaCheckin: config.horaCheckin,
+    horaCheckout: config.horaCheckout,
+    libres,
+  };
+  return { servicio, datos };
+}
+
+export type InfoCabalgata = {
+  nombre: string;
+  resumen: string;
+  duracion: string | null;
+  puntoEncuentro: string | null;
+  incluye: string[];
+  noIncluye: string[];
+  condiciones: { titulo: string; texto: string }[];
+  precioPersona: number;
+  /** Personas que montan (todo el grupo, sin los menores de 4 años). */
+  personas: number;
+  opciones: OpcionCabalgata[];
+};
+
+/** Lo que el paso de huéspedes muestra de la cabalgata para una estadía. Null si no se ofrece. */
+export async function obtenerCabalgata(entrada: unknown): Promise<InfoCabalgata | null> {
+  const e = esquemaEstadia.safeParse(entrada);
+  if (!e.success || !process.env.DATABASE_URL) return null;
+  const { llegada, salida, huespedes, adicionales } = e.data;
+  if (salida <= llegada || llegada < hoyEnBogota()) return null;
+  const db = getDb();
+  const [config] = await db.select().from(configuracion).limit(1);
+  if (!config) return null;
+  const cabalgata = await cargarCabalgata(db, config, llegada, salida);
+  if (!cabalgata) return null;
+  const { servicio, datos } = cabalgata;
+  const personas = personasCabalgata(huespedes, adicionales);
+  return {
+    nombre: servicio.nombre,
+    resumen: servicio.resumen,
+    duracion: servicio.duracion,
+    puntoEncuentro: servicio.puntoEncuentro,
+    incluye: servicio.incluye,
+    noIncluye: servicio.noIncluye,
+    condiciones: servicio.condiciones,
+    precioPersona: servicio.precio,
+    personas,
+    opciones: opcionesCabalgata(llegada, salida, personas, datos),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +413,7 @@ export function nuevoCodigo(prefijo: "LAU" | "SRV" = "LAU") {
   return `${prefijo}-${Array.from({ length: 8 }, () => ALFABETO[randomInt(ALFABETO.length)]).join("")}`;
 }
 
-function esViolacionSinCruce(error: unknown) {
+export function esViolacionSinCruce(error: unknown) {
   const e = error as { code?: string; cause?: { code?: string } };
   return e?.code === "23P01" || e?.cause?.code === "23P01";
 }
@@ -242,7 +451,7 @@ export async function crearReservaPendiente(entrada: {
 
   try {
     return await getDb().transaction(async (tx) => {
-      // Libera los holds vencidos antes de comprobar disponibilidad.
+      // Libera los holds vencidos antes de comprobar disponibilidad (y los usos de códigos).
       await tx
         .update(reservas)
         .set({ estado: "expirada" })
@@ -250,8 +459,19 @@ export async function crearReservaPendiente(entrada: {
 
       const datos = await cargarDatos(tx, llegada, sumarDias(salida, -1));
       if (!datos) return { ok: false, error: "sin_configuracion" } as const;
-      const cotizacion = cotizar(estadia.data, datos, hoyEnBogota());
+      const hoy = hoyEnBogota();
+      const base = cotizar(estadia.data, datos, hoy);
+      if (!base.ok) return base;
+      const { cotizacion, codigoId } = await completarCotizacion(
+        tx,
+        base,
+        estadia.data,
+        datos.config,
+        hoy,
+        true,
+      );
       if (!cotizacion.ok) return cotizacion;
+      const { cabalgata } = cotizacion;
 
       const [fila] = await tx
         .insert(reservas)
@@ -265,6 +485,12 @@ export async function crearReservaPendiente(entrada: {
           menoresAdicionales: adicionales.menores,
           estado: "pendiente",
           totalCop: cotizacion.total,
+          codigoDescuentoId: codigoId,
+          descuentoCop: cotizacion.descuento?.monto ?? 0,
+          cabalgataFecha: cabalgata?.fecha ?? null,
+          cabalgataTurno: cabalgata?.turno ?? null,
+          cabalgataPersonas: cabalgata?.personas ?? 0,
+          cabalgataCop: cabalgata?.subtotal ?? 0,
           desglose: cotizacion.noches,
           ...datosHuesped,
           expiraEn: sql`now() + make_interval(mins => ${datos.config.minutosHold})`,
@@ -298,14 +524,36 @@ export async function liberarReservaPendiente(codigo: string) {
  * Confirma una reserva pagada, dentro de la transacción del webhook. Si su hold ya venció o
  * se canceló, intenta confirmarla igual: reservas_sin_cruce lo impide si otra reserva tomó
  * esas noches. Corre en un savepoint para que ese error no aborte la transacción `tx`.
+ * Si lleva cabalgata, recuenta sus cupos sin contarse a sí misma: si otra reserva los tomó
+ * mientras su hold estaba vencido, devuelve "sin_cupo" y no confirma nada.
+ * Es común a todas las pasarelas: cada webhook la llama con su nombre.
  */
 export async function confirmarReserva(
   tx: Tx,
   reservaId: number,
   pasarela: string,
-): Promise<"confirmada" | "no_disponible"> {
+): Promise<"confirmada" | "no_disponible" | "sin_cupo"> {
   try {
     await tx.transaction(async (sp) => {
+      const [r] = await sp
+        .select({
+          fecha: reservas.cabalgataFecha,
+          turno: reservas.cabalgataTurno,
+          personas: reservas.cabalgataPersonas,
+        })
+        .from(reservas)
+        .where(eq(reservas.id, reservaId));
+      if (r?.fecha && r.turno !== null) {
+        const [config] = await sp.select().from(configuracion).limit(1);
+        const cabalgata = config
+          ? await cargarCabalgata(sp, config, r.fecha, r.fecha, {
+              bloquear: true,
+              excluirReservaId: reservaId,
+            })
+          : null;
+        const libres = cabalgata?.datos.libres.get(`${r.fecha}|${r.turno}`) ?? 0;
+        if (r.personas > libres) throw new SinCupoCabalgata();
+      }
       // Un hold vencido que siga "pendiente" también cuenta para la restricción.
       await sp
         .update(reservas)
@@ -325,9 +573,12 @@ export async function confirmarReserva(
     return "confirmada";
   } catch (error) {
     if (esViolacionSinCruce(error)) return "no_disponible";
+    if (error instanceof SinCupoCabalgata) return "sin_cupo";
     throw error;
   }
 }
+
+class SinCupoCabalgata extends Error {}
 
 export function enmascararCorreo(correo: string) {
   const [usuario = "", dominio = ""] = correo.split("@");
@@ -337,6 +588,7 @@ export function enmascararCorreo(correo: string) {
 export type ReservaPublica = {
   codigo: string;
   estado: (typeof reservas.$inferSelect)["estado"];
+  origen: (typeof reservas.$inferSelect)["origen"];
   nombre: string;
   correo: string;
   fechaLlegada: string;
@@ -346,6 +598,7 @@ export type ReservaPublica = {
   totalCop: number;
   expiraEn: string;
   documentoRecibido: boolean;
+  cabalgata: { fecha: string; turno: string; personas: number; totalCop: number } | null;
 };
 
 function adicionalesDe(r: {
@@ -367,6 +620,7 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
     .select({
       codigo: reservas.codigo,
       estado: reservas.estado,
+      origen: reservas.origen,
       nombre: reservas.nombre,
       correo: reservas.correo,
       fechaLlegada: reservas.fechaLlegada,
@@ -378,6 +632,10 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
       totalCop: reservas.totalCop,
       expiraEn: reservas.expiraEn,
       documentoRecibidoEn: reservas.documentoRecibidoEn,
+      cabalgataFecha: reservas.cabalgataFecha,
+      cabalgataTurno: reservas.cabalgataTurno,
+      cabalgataPersonas: reservas.cabalgataPersonas,
+      cabalgataCop: reservas.cabalgataCop,
     })
     .from(reservas)
     .where(eq(reservas.codigo, codigo))
@@ -391,6 +649,10 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
     adultosAdicionales: _a,
     ninosAdicionales: _n,
     menoresAdicionales: _m,
+    cabalgataFecha,
+    cabalgataTurno,
+    cabalgataPersonas,
+    cabalgataCop,
     ...resto
   } = r;
   return {
@@ -401,6 +663,15 @@ export async function obtenerReservaPublica(codigo: string): Promise<ReservaPubl
     correo: enmascararCorreo(r.correo),
     expiraEn: r.expiraEn.toISOString(),
     documentoRecibido: documentoRecibidoEn !== null,
+    cabalgata:
+      cabalgataFecha && cabalgataTurno !== null
+        ? {
+            fecha: cabalgataFecha,
+            turno: cabalgataTurno,
+            personas: cabalgataPersonas,
+            totalCop: cabalgataCop,
+          }
+        : null,
   };
 }
 

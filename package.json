@@ -15,7 +15,8 @@
     "db:generate": "npm run db:generate -w @lauburu/backend",
     "db:migrate": "npm run db:migrate -w @lauburu/backend",
     "db:seed": "npm run db:seed -w @lauburu/backend",
-    "db:seed:ejemplo": "npm run db:seed:ejemplo -w @lauburu/backend"
+    "db:seed:ejemplo": "npm run db:seed:ejemplo -w @lauburu/backend",
+    "admin": "npm run admin -w @lauburu/backend --"
   },
   "devDependencies": {
     "prettier": "^3.9.10"

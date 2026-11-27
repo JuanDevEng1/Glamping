@@ -278,7 +278,7 @@ describe.skipIf(!url)("pagos con PayPal en BD de pruebas", () => {
     expect((await pagoDe(inicio.idOrden)).estado).toBe("requiere_reembolso");
   });
 
-  it("pedido de servicios: el webhook confirma y pasa los cupos a reservados", async () => {
+  it("pedido de servicio: el webhook confirma y pasa los cupos a reservados", async () => {
     const { iniciarPagoPaypal, procesarWebhookPaypal } = await import("../src/pagos");
     const { crearPedidoPendiente } = await import("../src/pedidos");
     const { cuposServicio, getDb, pedidos } = await import("../src/db");

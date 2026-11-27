@@ -1,5 +1,5 @@
-// Catálogo de servicios, disponibilidad y pedidos (Fase 5). Usa la BD; las reglas
-// del carrito están en servicios.ts. El stock se descuenta SOLO al confirmar el pago
+// Catálogo de servicio, disponibilidad y pedidos (Fase 5). Usa la BD; las reglas
+// del carrito están en servicio.ts. El stock se descuenta SOLO al confirmar el pago
 // (confirmarPedido, desde el webhook); un pedido pendiente aparta cupos hasta expira_en.
 import { and, asc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod";

@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  agregarCabalgata,
+  aplicarDescuento,
   calcularFestivos,
   calendarioMes,
   clasificarNoche,
   cotizar,
+  opcionesCabalgata,
+  personasCabalgata,
+  turnoEnEstadia,
   type AjusteFecha,
+  type CodigoDescuento,
+  type Cotizacion,
+  type DatosCabalgata,
   type ConfigTarifas,
   type DatosTarifas,
   type Temporada,
@@ -479,5 +487,225 @@ describe("calcularFestivos", () => {
 
   it("cada festivo tiene nombre", () => {
     expect(calcularFestivos(2026).every((f) => f.nombre.length > 0)).toBe(true);
+  });
+});
+
+describe("códigos de descuento", () => {
+  const codigo = (cambios: Partial<CodigoDescuento> = {}): CodigoDescuento => ({
+    codigo: "PROMO15",
+    porcentaje: 15,
+    activo: true,
+    validoDesde: null,
+    validoHasta: null,
+    estadiaDesde: null,
+    estadiaHasta: null,
+    usosMaximos: null,
+    usos: 0,
+    ...cambios,
+  });
+
+  // 10 y 11 de noviembre, entre semana: 2 × 280 000.
+  const base = () => {
+    const r = cotizar(estadia("2026-11-10", "2026-11-12"), datos(), HOY);
+    if (!r.ok) throw new Error(r.error);
+    return r;
+  };
+
+  it("sin código la cotización no trae descuento", () => {
+    expect(base()).toMatchObject({ descuento: null, totalSinDescuento: 560_000, total: 560_000 });
+  });
+
+  it("aplica el porcentaje sobre el total", () => {
+    expect(aplicarDescuento(base(), codigo(), HOY)).toMatchObject({
+      ok: true,
+      totalSinDescuento: 560_000,
+      descuento: { codigo: "PROMO15", porcentaje: 15, monto: 84_000 },
+      total: 476_000,
+    });
+  });
+
+  it("incluye personas extra y adicionales en la base del descuento", () => {
+    const r = cotizar(estadia("2026-11-10", "2026-11-11", 3), datos(), HOY); // 280 000 + 60 000
+    if (!r.ok) throw new Error(r.error);
+    expect(aplicarDescuento(r, codigo({ porcentaje: 10 }), HOY)).toMatchObject({
+      descuento: { monto: 34_000 },
+      total: 306_000,
+    });
+  });
+
+  it("redondea el descuento al peso", () => {
+    const cot: Cotizacion = { ...base(), totalSinDescuento: 99_999, total: 99_999 };
+    expect(aplicarDescuento(cot, codigo(), HOY)).toMatchObject({
+      descuento: { monto: 15_000 },
+      total: 84_999,
+    });
+  });
+
+  it("rechaza un código que no existe", () => {
+    expect(aplicarDescuento(base(), null, HOY)).toEqual({
+      ok: false,
+      error: "codigo_invalido",
+      motivo: "inexistente",
+    });
+  });
+
+  it("rechaza un código inactivo, vencido o que aún no empieza", () => {
+    const vencido = { ok: false, error: "codigo_invalido", motivo: "vencido" };
+    expect(aplicarDescuento(base(), codigo({ activo: false }), HOY)).toEqual(vencido);
+    expect(aplicarDescuento(base(), codigo({ validoHasta: "2026-10-20" }), HOY)).toEqual(vencido);
+    expect(aplicarDescuento(base(), codigo({ validoDesde: "2026-10-22" }), HOY)).toEqual(vencido);
+    // Los días límite cuentan.
+    expect(
+      aplicarDescuento(base(), codigo({ validoDesde: HOY, validoHasta: HOY }), HOY),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rechaza un código sin usos disponibles", () => {
+    expect(aplicarDescuento(base(), codigo({ usosMaximos: 3, usos: 3 }), HOY)).toMatchObject({
+      error: "codigo_invalido",
+      motivo: "agotado",
+    });
+    expect(aplicarDescuento(base(), codigo({ usosMaximos: 3, usos: 2 }), HOY)).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("exige que todas las noches caigan en el rango de estadía", () => {
+    const fechas = { ok: false, error: "codigo_invalido", motivo: "fechas" };
+    // Noches 10 y 11: basta con que una quede fuera.
+    expect(aplicarDescuento(base(), codigo({ estadiaHasta: "2026-11-10" }), HOY)).toEqual(fechas);
+    expect(aplicarDescuento(base(), codigo({ estadiaDesde: "2026-11-11" }), HOY)).toEqual(fechas);
+    // La salida (12) no es noche: un rango hasta el 11 sirve.
+    expect(
+      aplicarDescuento(
+        base(),
+        codigo({ estadiaDesde: "2026-11-10", estadiaHasta: "2026-11-11" }),
+        HOY,
+      ),
+    ).toMatchObject({ ok: true });
+  });
+});
+
+describe("cabalgata", () => {
+  // Estadía del martes 10 al jueves 12 de noviembre (2 noches, 280 000 c/u).
+  const datosCab = (libres: Record<string, number> = {}): DatosCabalgata => ({
+    precioPersona: 85_000,
+    turnos: ["09:00", "15:00"],
+    horaCheckin: "15:00:00",
+    horaCheckout: "12:00:00",
+    libres: new Map(
+      Object.entries({
+        "2026-11-10|15:00": 6,
+        "2026-11-11|09:00": 6,
+        "2026-11-11|15:00": 6,
+        "2026-11-12|09:00": 6,
+        ...libres,
+      }),
+    ),
+  });
+  const base = (huespedes = 2, adicionales = { adultos: 0, ninos: 0, menores: 0 }) => {
+    const r = cotizar(
+      { llegada: "2026-11-10", salida: "2026-11-12", huespedes, adicionales },
+      datos(),
+      HOY,
+    );
+    if (!r.ok) throw new Error(r.error);
+    return r;
+  };
+
+  it("el día de llegada solo desde el check-in y el de salida solo antes del check-out", () => {
+    const horas = { horaCheckin: "15:00:00", horaCheckout: "12:00:00" };
+    const ok = (fecha: string, turno: string) =>
+      turnoEnEstadia(fecha, turno, "2026-11-10", "2026-11-12", horas);
+    expect(ok("2026-11-10", "09:00")).toBe(false);
+    expect(ok("2026-11-10", "15:00")).toBe(true);
+    expect(ok("2026-11-11", "09:00")).toBe(true);
+    expect(ok("2026-11-12", "09:00")).toBe(true);
+    expect(ok("2026-11-12", "15:00")).toBe(false);
+    expect(ok("2026-11-09", "15:00")).toBe(false);
+    expect(ok("2026-11-13", "09:00")).toBe(false);
+    // Sin turno: cualquier día de la estadía.
+    expect(ok("2026-11-10", "")).toBe(true);
+  });
+
+  it("ofrece los turnos de la estadía e indica si alcanzan para el grupo", () => {
+    const opciones = opcionesCabalgata(
+      "2026-11-10",
+      "2026-11-12",
+      4,
+      datosCab({ "2026-11-11|09:00": 3 }),
+    );
+    expect(opciones).toEqual([
+      { fecha: "2026-11-10", turnos: [{ turno: "15:00", libres: 6, alcanza: true }] },
+      {
+        fecha: "2026-11-11",
+        turnos: [
+          { turno: "09:00", libres: 3, alcanza: false },
+          { turno: "15:00", libres: 6, alcanza: true },
+        ],
+      },
+      { fecha: "2026-11-12", turnos: [{ turno: "09:00", libres: 6, alcanza: true }] },
+    ]);
+  });
+
+  it("cobra a todo el grupo, sin los menores de 4 años", () => {
+    expect(personasCabalgata(6, { adultos: 2, ninos: 1, menores: 1 })).toBe(9);
+    const r = agregarCabalgata(
+      base(6, { adultos: 1, ninos: 0, menores: 1 }),
+      { fecha: "2026-11-11", turno: "09:00" },
+      datosCab({ "2026-11-11|09:00": 7 }),
+    );
+    expect(r).toMatchObject({
+      ok: true,
+      cabalgata: { fecha: "2026-11-11", turno: "09:00", personas: 7, subtotal: 595_000 },
+    });
+    if (r.ok) expect(r.total).toBe(r.totalSinDescuento + 595_000);
+  });
+
+  it("rechaza un turno fuera de la estadía o que no existe", () => {
+    const invalida = { ok: false, error: "cabalgata_invalida" };
+    expect(agregarCabalgata(base(), { fecha: "2026-11-10", turno: "09:00" }, datosCab())).toEqual(
+      invalida,
+    );
+    expect(agregarCabalgata(base(), { fecha: "2026-11-13", turno: "09:00" }, datosCab())).toEqual(
+      invalida,
+    );
+    expect(agregarCabalgata(base(), { fecha: "2026-11-11", turno: "11:00" }, datosCab())).toEqual(
+      invalida,
+    );
+  });
+
+  it("rechaza si el grupo no cabe en el turno", () => {
+    expect(
+      agregarCabalgata(
+        base(3),
+        { fecha: "2026-11-11", turno: "09:00" },
+        datosCab({ "2026-11-11|09:00": 2 }),
+      ),
+    ).toEqual({ ok: false, error: "cabalgata_sin_cupo" });
+  });
+
+  it("el descuento solo rebaja el alojamiento, en cualquier orden", () => {
+    const codigo: CodigoDescuento = {
+      codigo: "PROMO15",
+      porcentaje: 15,
+      activo: true,
+      validoDesde: null,
+      validoHasta: null,
+      estadiaDesde: null,
+      estadiaHasta: null,
+      usosMaximos: null,
+      usos: 0,
+    };
+    const eleccion = { fecha: "2026-11-11", turno: "15:00" };
+    const primero = aplicarDescuento(base(), codigo, HOY);
+    if (!primero.ok) throw new Error(primero.error);
+    const a = agregarCabalgata(primero, eleccion, datosCab());
+    const segundo = agregarCabalgata(base(), eleccion, datosCab());
+    if (!segundo.ok) throw new Error(segundo.error);
+    const b = aplicarDescuento(segundo, codigo, HOY);
+    // 560 000 − 84 000 + 2 × 85 000
+    expect(a).toMatchObject({ descuento: { monto: 84_000 }, total: 646_000 });
+    expect(b).toMatchObject({ descuento: { monto: 84_000 }, total: 646_000 });
   });
 });

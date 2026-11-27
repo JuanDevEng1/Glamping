@@ -5,6 +5,7 @@
 import {
   cotizarEstadia,
   crearReservaPendiente,
+  obtenerCabalgata,
   liberarReservaPendiente,
   recibirDocumentoReserva,
 } from "@lauburu/backend/reservas";
@@ -15,10 +16,18 @@ type Estadia = {
   salida: string;
   huespedes: number;
   adicionales?: { adultos: number; ninos: number; menores: number };
+  /** Código de descuento: el servidor lo valida y calcula el descuento. */
+  codigo?: string;
+  /** Cabalgata para todo el grupo: el servidor valida el cupo y pone el precio. */
+  cabalgata?: { fecha: string; turno: string };
 };
 
 export async function cotizar(estadia: Estadia) {
   return cotizarEstadia(estadia);
+}
+
+export async function cabalgataDeEstadia(estadia: Estadia) {
+  return obtenerCabalgata(estadia);
 }
 
 export async function crearReserva(estadia: Estadia, huesped: Record<string, unknown>) {

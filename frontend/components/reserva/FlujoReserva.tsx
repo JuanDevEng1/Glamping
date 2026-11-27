@@ -22,11 +22,19 @@ import {
   totalAdicionales,
   type Adicionales,
   type Cotizacion,
+  type EleccionCabalgata,
+  type MotivoCodigoInvalido,
   type TipoNoche,
 } from "@lauburu/backend/precios";
-import type { ResultadoCotizacion, ResultadoCrear, TipoDocumento } from "@lauburu/backend/reservas";
+import type {
+  InfoCabalgata,
+  ResultadoCotizacion,
+  ResultadoCrear,
+  TipoDocumento,
+} from "@lauburu/backend/reservas";
 import { useRouter } from "next/navigation";
 import {
+  cabalgataDeEstadia,
   capturarPagoReserva,
   cotizar,
   crearReserva,
@@ -95,8 +103,33 @@ const datosIniciales: Datos = {
 
 type Errores = Record<string, string[] | undefined>;
 
+function mensajeCodigo(motivo?: MotivoCodigoInvalido) {
+  switch (motivo) {
+    case "fechas":
+      return "Este código no aplica para las fechas que elegiste.";
+    case "agotado":
+      return "Este código ya alcanzó su número de usos.";
+    default:
+      return "Ese código no existe o ya no está vigente.";
+  }
+}
+
+function mensajeCabalgata(error: "cabalgata_invalida" | "cabalgata_sin_cupo") {
+  return error === "cabalgata_sin_cupo"
+    ? "Ya no quedan cupos para todo el grupo en ese turno. Elige otro día u hora."
+    : "La cabalgata que elegiste ya no coincide con tu estadía. Elige otro día u hora.";
+}
+
+const esErrorCabalgata = (error: string): error is "cabalgata_invalida" | "cabalgata_sin_cupo" =>
+  error === "cabalgata_invalida" || error === "cabalgata_sin_cupo";
+
 function mensajeError(r: Exclude<ResultadoCotizacion | ResultadoCrear, { ok: true }>, max: number) {
   switch (r.error) {
+    case "codigo_invalido":
+      return mensajeCodigo(r.motivo);
+    case "cabalgata_invalida":
+    case "cabalgata_sin_cupo":
+      return mensajeCabalgata(r.error);
     case "minimo_noches":
       return `Para estas fechas la estadía mínima es de ${r.minimo} noches.`;
     case "no_disponible":
@@ -312,6 +345,27 @@ function Desglose({ cot, trm }: { cot: Cotizacion; trm: number | null }) {
             trm={trm}
           />
         )}
+        {cot.descuento && (
+          <li className="flex items-baseline justify-between gap-4 py-2 text-small">
+            <span>
+              Descuento {cot.descuento.codigo} ({cot.descuento.porcentaje} %)
+              {cot.cabalgata && (
+                <span className="block text-xs text-verde">Sobre el alojamiento</span>
+              )}
+            </span>
+            <span className="shrink-0 font-medium text-verde">
+              −<Precio cop={cot.descuento.monto} trm={trm} />
+            </span>
+          </li>
+        )}
+        {cot.cabalgata && (
+          <LineaAdicional
+            texto={`Cabalgata · ${cot.cabalgata.personas} ${cot.cabalgata.personas === 1 ? "persona" : "personas"}`}
+            detalle={`${formatoFechaCorta(cot.cabalgata.fecha)}${cot.cabalgata.turno ? `, ${formatoHora(cot.cabalgata.turno)}` : ""}`}
+            cop={cot.cabalgata.subtotal}
+            trm={trm}
+          />
+        )}
       </ul>
       <p className="mt-2 flex items-baseline justify-between gap-4 border-t border-verde pt-3">
         <span className="font-medium text-verde">Total</span>
@@ -379,12 +433,20 @@ function Resumen({
           {conDesglose ? (
             <Desglose cot={cot} trm={trm?.valor ?? null} />
           ) : (
-            <p className="flex items-baseline justify-between gap-4">
-              <span className="font-medium text-verde">Total</span>
-              <span className="text-h3 font-bold text-verde">
-                <Precio cop={cot.total} trm={trm?.valor ?? null} />
-              </span>
-            </p>
+            <>
+              <p className="flex items-baseline justify-between gap-4">
+                <span className="font-medium text-verde">Total</span>
+                <span className="text-h3 font-bold text-verde">
+                  <Precio cop={cot.total} trm={trm?.valor ?? null} />
+                </span>
+              </p>
+              {cot.descuento && (
+                <p className="mt-1 text-small">
+                  Incluye tu descuento {cot.descuento.codigo} de{" "}
+                  <Precio cop={cot.descuento.monto} trm={trm?.valor ?? null} />.
+                </p>
+              )}
+            </>
           )}
           <NotaMoneda trm={trm} className="mt-3" />
         </div>
@@ -467,6 +529,249 @@ export function CuentaRegresiva({
   );
 }
 
+/**
+ * Cabalgata opcional para todo el grupo: elegir día y turno de la estadía. Los cupos y el
+ * precio vienen del servidor (obtenerCabalgata) y se vuelven a validar al cotizar.
+ */
+function TarjetaCabalgata({
+  info,
+  eleccion,
+  menores,
+  error,
+  cargando,
+  trm,
+  onElegir,
+  onQuitar,
+}: {
+  info: InfoCabalgata;
+  eleccion: EleccionCabalgata | null;
+  menores: number;
+  error: string | null;
+  cargando: boolean;
+  trm: number | null;
+  onElegir: (eleccion: EleccionCabalgata) => void;
+  onQuitar: () => void;
+}) {
+  const disponibles = info.opciones.filter((o) => o.turnos.some((t) => t.alcanza));
+  const [fecha, setFecha] = useState("");
+  const [turno, setTurno] = useState("");
+  const dia = disponibles.find((o) => o.fecha === fecha);
+  const sinTurnos = dia?.turnos.length === 1 && dia.turnos[0]!.turno === "";
+  const n = info.personas;
+
+  function elegirDia(valor: string) {
+    setFecha(valor);
+    const libres = disponibles.find((o) => o.fecha === valor)?.turnos.filter((t) => t.alcanza);
+    setTurno(libres?.length === 1 ? libres[0]!.turno : "");
+  }
+
+  return (
+    <section
+      aria-labelledby="cabalgata-titulo"
+      className="mt-6 rounded-card border border-niebla bg-blanco p-5 md:p-6"
+    >
+      <h3 id="cabalgata-titulo" className="font-serif text-h3 text-verde">
+        {info.nombre} <span className="font-sans text-small text-cafe">(opcional)</span>
+      </h3>
+      <p className="mt-2 max-w-[65ch] text-small">{info.resumen}</p>
+      {(info.duracion || info.puntoEncuentro) && (
+        <p className="mt-1 text-xs">
+          {[info.duracion, info.puntoEncuentro && `Salida: ${info.puntoEncuentro}`]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
+      {info.incluye.length > 0 && (
+        <p className="mt-1 text-xs">Incluye: {info.incluye.join(" · ")}</p>
+      )}
+      {info.condiciones.map((c) => (
+        <p key={c.titulo} className="mt-1 text-xs">
+          <strong className="font-medium text-verde">{c.titulo}:</strong> {c.texto}
+        </p>
+      ))}
+      <p className="mt-3 max-w-[65ch] text-small">
+        Va todo el grupo: {n} {n === 1 ? "persona" : "personas"} ×{" "}
+        <Precio cop={info.precioPersona} trm={trm} /> ={" "}
+        <strong className="font-medium text-verde">
+          <Precio cop={n * info.precioPersona} trm={trm} />
+        </strong>
+        .{menores > 0 && " Los menores de 4 años no montan ni pagan."}
+      </p>
+
+      {eleccion ? (
+        <p className="mt-4 flex flex-wrap items-center gap-2 text-small">
+          <Check size={20} strokeWidth={1.5} className="shrink-0 text-verde" aria-hidden />
+          <span>
+            Agregada para el {formatoFechaCorta(eleccion.fecha)}
+            {eleccion.turno && ` a las ${formatoHora(eleccion.turno)}`}.
+          </span>
+          <button type="button" onClick={onQuitar} className={claseBoton("texto")}>
+            Quitar
+          </button>
+        </p>
+      ) : disponibles.length === 0 ? (
+        <p className="mt-4 max-w-[65ch] text-small">
+          No quedan cupos para todo el grupo en tus fechas. Escríbenos por{" "}
+          <a
+            href={enlaceWhatsApp("Hola, quiero preguntar por la cabalgata en Lauburu Glamping")}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={claseBoton("texto")}
+          >
+            WhatsApp
+          </a>{" "}
+          y buscamos una opción.
+        </p>
+      ) : (
+        <div className="mt-4 flex flex-col gap-4">
+          <Campo id="campo-cabalgata-dia" etiqueta="Día" className="max-w-xs">
+            <select
+              id="campo-cabalgata-dia"
+              value={fecha}
+              onChange={(e) => elegirDia(e.target.value)}
+              className={claseCampo(false)}
+            >
+              <option value="">Elige un día</option>
+              {disponibles.map((o) => (
+                <option key={o.fecha} value={o.fecha}>
+                  {formatoFechaCorta(o.fecha)}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          {dia && !sinTurnos && (
+            <fieldset>
+              <legend className="text-small font-medium text-verde">Hora</legend>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {dia.turnos.map((t) => (
+                  <label
+                    key={t.turno}
+                    className={`inline-flex h-11 items-center gap-2 rounded-full border-[1.5px] px-4 text-small ${
+                      t.alcanza
+                        ? "cursor-pointer border-verde text-verde"
+                        : "border-niebla opacity-50"
+                    } has-[:checked]:bg-verde has-[:checked]:text-crema`}
+                  >
+                    <input
+                      type="radio"
+                      name="cabalgata-turno"
+                      value={t.turno}
+                      checked={turno === t.turno}
+                      disabled={!t.alcanza}
+                      onChange={() => setTurno(t.turno)}
+                      className="sr-only"
+                    />
+                    {formatoHora(t.turno)}
+                    {!t.alcanza && " · sin cupo para el grupo"}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          <button
+            type="button"
+            disabled={!dia || (!sinTurnos && !turno) || cargando}
+            onClick={() => onElegir({ fecha, turno: sinTurnos ? "" : turno })}
+            className={`${claseBoton("secundario")} self-start`}
+          >
+            {cargando
+              ? "Revisando…"
+              : `Agregar para ${n === 1 ? "1 persona" : `las ${n} personas`}`}
+          </button>
+        </div>
+      )}
+      {error && <Aviso>{error}</Aviso>}
+    </section>
+  );
+}
+
+/** "¿Tienes un código de descuento?" → campo + Aplicar. El servidor decide si vale. */
+function CampoCodigo({
+  aplicado,
+  error,
+  cargando,
+  onAplicar,
+  onQuitar,
+  onEscribir,
+}: {
+  aplicado: string | null;
+  error: string | null;
+  cargando: boolean;
+  onAplicar: (codigo: string) => void;
+  onQuitar: () => void;
+  onEscribir: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState("");
+
+  if (aplicado) {
+    return (
+      <p className="mt-4 flex flex-wrap items-center gap-2 text-small">
+        <Check size={20} strokeWidth={1.5} className="shrink-0 text-verde" aria-hidden />
+        <span>
+          Aplicamos tu código <strong className="font-medium text-verde">{aplicado}</strong>.
+        </span>
+        <button type="button" onClick={onQuitar} className={claseBoton("texto")}>
+          Quitar
+        </button>
+      </p>
+    );
+  }
+
+  if (!abierto && !error) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className={`${claseBoton("texto")} mt-4`}
+      >
+        ¿Tienes un código de descuento?
+      </button>
+    );
+  }
+
+  const aplicar = () => texto.trim() && onAplicar(texto);
+  return (
+    <Campo
+      id="campo-codigo"
+      etiqueta="Código de descuento"
+      error={error ?? undefined}
+      className="mt-4 max-w-md"
+    >
+      <div className="flex gap-3">
+        <input
+          id="campo-codigo"
+          value={texto}
+          maxLength={30}
+          autoCapitalize="characters"
+          autoComplete="off"
+          onChange={(e) => {
+            setTexto(e.target.value);
+            onEscribir();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              aplicar();
+            }
+          }}
+          aria-invalid={!!error}
+          aria-describedby={error ? "campo-codigo-error" : undefined}
+          className={`${claseCampo(!!error)} uppercase`}
+        />
+        <button
+          type="button"
+          disabled={!texto.trim() || cargando}
+          onClick={aplicar}
+          className={`${claseBoton("secundario")} shrink-0`}
+        >
+          {cargando ? "Revisando…" : "Aplicar"}
+        </button>
+      </div>
+    </Campo>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Flujo
 // ---------------------------------------------------------------------------
@@ -500,6 +805,14 @@ export function FlujoReserva({
   const lugaresLibres = config.maxAdicionales - totalAdicionales(adicionales);
   const [cotizacion, setCotizacion] = useState<ResultadoCotizacion | null>(null);
   const [cotizando, setCotizando] = useState(false);
+  // Código que el huésped pidió aplicar; si el servidor lo rechaza, vuelve a null con un mensaje.
+  const [codigo, setCodigo] = useState<string | null>(null);
+  const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
+  // Cabalgata: lo que ofrece el servidor para la estadía y lo que el huésped eligió.
+  const [infoCabalgata, setInfoCabalgata] = useState<InfoCabalgata | null>(null);
+  const [cabalgata, setCabalgata] = useState<EleccionCabalgata | null>(null);
+  const [errorCabalgata, setErrorCabalgata] = useState<string | null>(null);
+  const [recargaCabalgata, setRecargaCabalgata] = useState(0);
   const [datos, setDatos] = useState<Datos>(datosIniciales);
   const [errores, setErrores] = useState<Errores>({});
   const [aviso, setAviso] = useState<string | null>(null);
@@ -522,8 +835,31 @@ export function FlujoReserva({
     }
     let vigente = true;
     setCotizando(true);
-    cotizar({ llegada, salida, huespedes, adicionales: { adultos, ninos, menores } })
-      .then((r) => vigente && setCotizacion(r))
+    cotizar({
+      llegada,
+      salida,
+      huespedes,
+      adicionales: { adultos, ninos, menores },
+      codigo: codigo ?? undefined,
+      cabalgata: cabalgata ?? undefined,
+    })
+      .then((r) => {
+        if (!vigente) return;
+        if (!r.ok && r.error === "codigo_invalido") {
+          // Se vuelve a cotizar sin el código.
+          setErrorCodigo(mensajeCodigo(r.motivo));
+          setCodigo(null);
+          return;
+        }
+        if (!r.ok && esErrorCabalgata(r.error)) {
+          // Se vuelve a cotizar sin la cabalgata y se refrescan sus cupos.
+          setErrorCabalgata(mensajeCabalgata(r.error));
+          setCabalgata(null);
+          setRecargaCabalgata((v) => v + 1);
+          return;
+        }
+        setCotizacion(r);
+      })
       .catch(
         () => vigente && setAviso("No pudimos calcular el precio. Intenta de nuevo en un momento."),
       )
@@ -531,7 +867,22 @@ export function FlujoReserva({
     return () => {
       vigente = false;
     };
-  }, [llegada, salida, huespedes, adultos, ninos, menores]);
+  }, [llegada, salida, huespedes, adultos, ninos, menores, codigo, cabalgata]);
+
+  // Días, turnos y cupos de la cabalgata para la estadía y el grupo elegidos.
+  useEffect(() => {
+    if (!llegada || !salida) {
+      setInfoCabalgata(null);
+      return;
+    }
+    let vigente = true;
+    cabalgataDeEstadia({ llegada, salida, huespedes, adicionales: { adultos, ninos, menores } })
+      .then((info) => vigente && setInfoCabalgata(info))
+      .catch(() => vigente && setInfoCabalgata(null));
+    return () => {
+      vigente = false;
+    };
+  }, [llegada, salida, huespedes, adultos, ninos, menores, recargaCabalgata]);
 
   // Al cambiar de paso: subir y llevar el foco al título (lectores de pantalla).
   useEffect(() => {
@@ -558,6 +909,9 @@ export function FlujoReserva({
 
   function cambiarFechas(l?: string, s?: string) {
     setAviso(null);
+    // Otra estadía: la cabalgata elegida ya no aplica.
+    setCabalgata(null);
+    setErrorCabalgata(null);
     setLlegada(l);
     setSalida(s);
   }
@@ -572,7 +926,17 @@ export function FlujoReserva({
     if (!llegada || !salida) return;
     setAviso(null);
     iniciar(async () => {
-      const r = await crearReserva({ llegada, salida, huespedes, adicionales }, datos);
+      const r = await crearReserva(
+        {
+          llegada,
+          salida,
+          huespedes,
+          adicionales,
+          codigo: codigo ?? undefined,
+          cabalgata: cabalgata ?? undefined,
+        },
+        datos,
+      );
       if (r.ok) {
         setReserva({ codigo: r.codigo, expiraEn: r.expiraEn });
         setCotizacion(r.cotizacion);
@@ -585,6 +949,26 @@ export function FlujoReserva({
         setErrores(r.errores);
         const primero = Object.keys(r.errores)[0];
         if (primero) document.getElementById(`campo-${primero}`)?.focus();
+        return;
+      }
+      if (r.error === "codigo_invalido") {
+        // Ej. se agotó mientras llenaba sus datos. Se recotiza sin él y puede seguir.
+        const mensaje = mensajeCodigo(r.motivo);
+        setErrorCodigo(mensaje);
+        setCodigo(null);
+        setAviso(
+          `${mensaje} Quitamos el descuento y actualizamos el total; puedes continuar sin él.`,
+        );
+        return;
+      }
+      if (esErrorCabalgata(r.error)) {
+        // Ej. otro grupo tomó el turno mientras llenaba sus datos.
+        setErrorCabalgata(mensajeCabalgata(r.error));
+        setCabalgata(null);
+        setRecargaCabalgata((v) => v + 1);
+        setAviso(
+          `${mensajeCabalgata(r.error)} Quitamos la cabalgata y actualizamos el total; puedes volver a huéspedes para elegir otra o continuar sin ella.`,
+        );
         return;
       }
       setAviso(mensajeError(r, config.maxHuespedes));
@@ -800,6 +1184,22 @@ export function FlujoReserva({
                   </fieldset>
                 )}
 
+                {infoCabalgata && (
+                  <TarjetaCabalgata
+                    info={infoCabalgata}
+                    eleccion={cot?.cabalgata ? cabalgata : null}
+                    menores={adicionales.menores}
+                    error={errorCabalgata}
+                    cargando={cotizando && cabalgata !== null}
+                    trm={trmValor}
+                    onElegir={(e) => {
+                      setErrorCabalgata(null);
+                      setCabalgata(e);
+                    }}
+                    onQuitar={() => setCabalgata(null)}
+                  />
+                )}
+
                 <div
                   className="mt-6 rounded-card border border-niebla bg-blanco p-5 md:p-6"
                   aria-busy={cotizando}
@@ -812,6 +1212,17 @@ export function FlujoReserva({
                       <p className="text-small">Calculando…</p>
                     )}
                   </div>
+                  <CampoCodigo
+                    aplicado={cot?.descuento?.codigo ?? null}
+                    error={errorCodigo}
+                    cargando={cotizando && codigo !== null}
+                    onAplicar={(c) => {
+                      setErrorCodigo(null);
+                      setCodigo(c.trim().toUpperCase());
+                    }}
+                    onQuitar={() => setCodigo(null)}
+                    onEscribir={() => setErrorCodigo(null)}
+                  />
                 </div>
                 {cotizacion && !cotizacion.ok && (
                   <Aviso>{mensajeError(cotizacion, config.maxHuespedes)}</Aviso>

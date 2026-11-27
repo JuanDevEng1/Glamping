@@ -1,4 +1,4 @@
-// Pagos de reservas y pedidos de servicios. La lógica común (montos, holds, idempotencia,
+// Pagos de reservas y pedidos de servicio. La lógica común (montos, holds, idempotencia,
 // confirmación en transacción) vive aquí; las llamadas HTTP a PayPal, en paypal.ts.
 // Reglas (CLAUDE.md): el monto sale de la BD, solo el webhook confirma, el webhook verifica
 // la firma (401), es idempotente por id de evento, compara monto y moneda y confirma en una

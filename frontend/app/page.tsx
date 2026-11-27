@@ -47,6 +47,7 @@ const experiencias = [
     texto: "Un paseo a caballo por los caminos de la vereda, a tu ritmo.",
     foto: "Cabalgata por un camino rural entre montañas",
     tipo: "extra",
+    enlace: { href: "/reservas", texto: "Agrégala al reservar" },
   },
   {
     titulo: "Recorridos guiados",
@@ -266,8 +267,7 @@ export default async function Nosotros() {
             {config && config.maxAdicionales > 0 && (
               <>
                 {" "}
-                Si son más de {maximo}, puedes sumar hasta {config.maxAdicionales} acompañantes:
-                adultos a{" "}
+                Puedes sumar hasta {config.maxAdicionales} acompañantes: adultos a{" "}
                 <strong className="font-medium text-verde">
                   <Precio cop={config.precioAdicionalAdulto} trm={trmValor} />
                 </strong>{" "}
@@ -360,23 +360,27 @@ export default async function Nosotros() {
           id="experiencias"
           overline="Experiencias"
           titulo="Vive el paisaje cafetero"
-          subtitulo="Planes para complementar tu estadía, con fincas y guías de la zona."
+          subtitulo="Plan para complementar tu estadía, con fincas y guías de la zona."
         />
         <div className="grid gap-4 md:grid-cols-3 md:gap-6">
-          {experiencias.map(({ titulo, texto, foto, tipo }) => (
-            <Tarjeta key={titulo} borde="miel">
-              <FotoPendiente descripcion={foto} className="aspect-[3/2]" />
-              <div className="mt-4 flex items-start justify-between gap-4">
-                <h3 className="font-serif text-h3 text-verde">{titulo}</h3>
-                <Chip tipo={tipo} />
-              </div>
-              <p className="mt-2 text-small">{texto}</p>
-            </Tarjeta>
-          ))}
+          {experiencias
+            .map((e) => ({ enlace: undefined, ...e }))
+            .map(({ titulo, texto, foto, tipo, enlace }) => (
+              <Tarjeta key={titulo} borde="miel">
+                <FotoPendiente descripcion={foto} className="aspect-[3/2]" />
+                <div className="mt-4 flex items-start justify-between gap-4">
+                  <h3 className="font-serif text-h3 text-verde">{titulo}</h3>
+                  <Chip tipo={tipo} />
+                </div>
+                <p className="mt-2 text-small">{texto}</p>
+                {enlace && (
+                  <Link href={enlace.href} className={`${claseBoton("texto")} mt-3 inline-block`}>
+                    {enlace.texto}
+                  </Link>
+                )}
+              </Tarjeta>
+            ))}
         </div>
-        <Link href="/servicios" className={`${claseBoton("texto")} mt-8 inline-block`}>
-          Ver todos los servicios
-        </Link>
       </Seccion>
 
       {/* 6. Galería */}

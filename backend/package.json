@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/semilla.ts",
-    "db:seed:ejemplo": "tsx scripts/semilla.ts --ejemplo"
+    "db:seed:ejemplo": "tsx scripts/semilla.ts --ejemplo",
+    "admin": "tsx scripts/admin.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

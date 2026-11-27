@@ -250,9 +250,9 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     if (!r.ok) throw new Error(`No se creó la reserva: ${r.error}`);
     codigos.push(r.codigo);
 
-    const monto = Math.round((r.cotizacion.totalSinDescuento * 15) / 100);
+    const monto = Math.round((r.cotizacion.baseDescuento * 15) / 100);
     expect(r.cotizacion.descuento).toEqual({ codigo: codigo.codigo, porcentaje: 15, monto });
-    expect(r.cotizacion.total).toBe(r.cotizacion.totalSinDescuento - monto);
+    expect(r.cotizacion.total).toBe(r.cotizacion.baseDescuento - monto);
 
     const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, r.codigo));
     expect(fila).toMatchObject({
@@ -330,7 +330,7 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
       precioPersona: 85_000,
       subtotal: 255_000,
     });
-    expect(r.cotizacion.total).toBe(r.cotizacion.totalSinDescuento + 255_000);
+    expect(r.cotizacion.total).toBe(r.cotizacion.baseDescuento + 255_000);
     const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, r.codigo));
     expect(fila).toMatchObject({
       totalCop: r.cotizacion.total,

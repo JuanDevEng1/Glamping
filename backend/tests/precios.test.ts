@@ -515,13 +515,13 @@ describe("códigos de descuento", () => {
   };
 
   it("sin código la cotización no trae descuento", () => {
-    expect(base()).toMatchObject({ descuento: null, totalSinDescuento: 560_000, total: 560_000 });
+    expect(base()).toMatchObject({ descuento: null, baseDescuento: 560_000, total: 560_000 });
   });
 
   it("aplica el porcentaje sobre el total", () => {
     expect(aplicarDescuento(base(), codigo(), HOY)).toMatchObject({
       ok: true,
-      totalSinDescuento: 560_000,
+      baseDescuento: 560_000,
       descuento: { codigo: "PROMO15", porcentaje: 15, monto: 84_000 },
       total: 476_000,
     });
@@ -537,10 +537,21 @@ describe("códigos de descuento", () => {
   });
 
   it("redondea el descuento al peso", () => {
-    const cot: Cotizacion = { ...base(), totalSinDescuento: 99_999, total: 99_999 };
+    const cot: Cotizacion = { ...base(), baseDescuento: 99_999, total: 99_999 };
     expect(aplicarDescuento(cot, codigo(), HOY)).toMatchObject({
       descuento: { monto: 15_000 },
       total: 84_999,
+    });
+  });
+
+  it("no rebaja el valor de las mascotas", () => {
+    // 2 noches × 280 000 + 1 mascota × 2 noches × 50 000.
+    const r = cotizar({ ...estadia("2026-11-10", "2026-11-12"), mascotas: 1 }, datos(), HOY);
+    if (!r.ok) throw new Error(r.error);
+    expect(r).toMatchObject({ baseDescuento: 560_000, extraMascotas: 100_000, total: 660_000 });
+    expect(aplicarDescuento(r, codigo(), HOY)).toMatchObject({
+      descuento: { monto: 84_000 },
+      total: 560_000 - 84_000 + 100_000,
     });
   });
 
@@ -664,7 +675,7 @@ describe("cabalgata", () => {
       ok: true,
       cabalgata: { fecha: "2026-11-11", turno: "09:00", personas: 7, subtotal: 595_000 },
     });
-    if (r.ok) expect(r.total).toBe(r.totalSinDescuento + 595_000);
+    if (r.ok) expect(r.total).toBe(r.baseDescuento + 595_000);
   });
 
   it("rechaza un turno fuera de la estadía o que no existe", () => {

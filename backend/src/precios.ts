@@ -116,12 +116,15 @@ export type Cotizacion = {
   /** Por mascota y por noche. */
   precioMascota: number;
   extraMascotas: number;
-  /** Alojamiento: subtotal + extraPersonas + extraAdicionales + extraMascotas. */
-  totalSinDescuento: number;
-  /** Solo sobre el alojamiento. */
+  /**
+   * Base del descuento: subtotal + extraPersonas + extraAdicionales. Las mascotas y la
+   * cabalgata no llevan descuento.
+   */
+  baseDescuento: number;
+  /** Solo sobre baseDescuento. */
   descuento: Descuento | null;
   cabalgata: Cabalgata | null;
-  /** Lo que se cobra: totalSinDescuento − descuento + cabalgata. */
+  /** Lo que se cobra: baseDescuento − descuento + extraMascotas + cabalgata. */
   total: number;
   moneda: "COP";
 };
@@ -335,7 +338,7 @@ export function cotizar(
       adicionales.ninos * config.precioAdicionalNino);
   const extraMascotas = cantidad * mascotas * config.precioMascota;
 
-  const total = subtotal + extraPersonas + extraAdicionales + extraMascotas;
+  const baseDescuento = subtotal + extraPersonas + extraAdicionales;
   return {
     ok: true,
     noches,
@@ -350,10 +353,10 @@ export function cotizar(
     mascotas,
     precioMascota: config.precioMascota,
     extraMascotas,
-    totalSinDescuento: total,
+    baseDescuento,
     descuento: null,
     cabalgata: null,
-    total,
+    total: baseDescuento + extraMascotas,
     moneda: "COP",
   };
 }
@@ -362,7 +365,11 @@ export function cotizar(
 function conTotal(cot: Cotizacion): Cotizacion {
   return {
     ...cot,
-    total: cot.totalSinDescuento - (cot.descuento?.monto ?? 0) + (cot.cabalgata?.subtotal ?? 0),
+    total:
+      cot.baseDescuento -
+      (cot.descuento?.monto ?? 0) +
+      cot.extraMascotas +
+      (cot.cabalgata?.subtotal ?? 0),
   };
 }
 
@@ -402,7 +409,7 @@ export function aplicarDescuento(
   );
   if (fuera) return invalido("fechas");
 
-  const monto = Math.round((cot.totalSinDescuento * codigo.porcentaje) / 100);
+  const monto = Math.round((cot.baseDescuento * codigo.porcentaje) / 100);
   return conTotal({
     ...cot,
     descuento: { codigo: codigo.codigo, porcentaje: codigo.porcentaje, monto },

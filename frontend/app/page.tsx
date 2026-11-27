@@ -134,6 +134,19 @@ export default async function Nosotros() {
     },
     // TODO(cliente): responder alimentos.
     { pregunta: "¿Puedo llevar mi propia comida y bebidas?", respuesta: respuestaPorWhatsApp },
+    {
+      pregunta: "¿Lauburu está registrado ante el Registro Nacional de Turismo?",
+      // Certificado de la Cámara de Comercio de Manizales. TODO(cliente): renovar antes del
+      // 31 de marzo de 2027 y actualizar esta respuesta y sitio.rnt.
+      respuesta: (
+        <p>
+          Sí. Lauburu Glamping está inscrito en el Registro Nacional de Turismo (RNT) con el número{" "}
+          {sitio.rnt}, como vivienda turística: finca turística (alojamiento rural). El registro lo
+          expidió la Cámara de Comercio de Manizales el 21 de noviembre de 2026 y está vigente hasta
+          el 31 de marzo de 2027.
+        </p>
+      ),
+    },
   ];
 
   return (

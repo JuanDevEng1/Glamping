@@ -193,7 +193,7 @@ npm run admin -- codigo desactivar PROMO15
 - `--estadia-desde` / `--estadia-hasta`: todas las noches de la estadía deben caer en ese rango.
 - `--usos`: máximo de reservas que pueden usarlo. Cuentan las confirmadas y las que se están pagando; si un pago no se completa, el uso se libera solo.
 - El código no distingue mayúsculas. Desactivarlo no cambia las reservas que ya lo usaron.
-- El descuento solo rebaja el alojamiento (noches, personas extra, adicionales y mascotas), no la cabalgata.
+- El descuento solo rebaja el alojamiento (noches, personas extra y adicionales), no las mascotas ni la cabalgata.
 
 ### Cabalgatas
 

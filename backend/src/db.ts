@@ -481,10 +481,24 @@ export const schema = {
 // build de Next) no exija DATABASE_URL.
 // ---------------------------------------------------------------------------
 
+/**
+ * Conexiones por proceso. Cada función de Netlify y cada worker del build crea su propio pool,
+ * y el pooler de Supabase en modo sesión admite pocos clientes (pool_size, hoy 15): con el
+ * máximo por defecto de postgres.js (10), dos workers del build ya lo agotan.
+ */
+const MAX_CONEXIONES = 3;
+
 function crearDb() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("Falta la variable de entorno DATABASE_URL");
-  return drizzle(postgres(url), { schema, casing: "snake_case" });
+  const cliente = postgres(url, {
+    max: MAX_CONEXIONES,
+    // Libera las conexiones ociosas para no ocupar cupos del pooler entre peticiones.
+    idle_timeout: 20,
+    // Sin sentencias preparadas: el pooler de Supabase en modo transacción no las admite.
+    prepare: false,
+  });
+  return drizzle(cliente, { schema, casing: "snake_case" });
 }
 
 export type Db = ReturnType<typeof crearDb>;

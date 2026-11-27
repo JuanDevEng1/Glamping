@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   agregarCabalgata,
   aplicarDescuento,
+  calcularFechasEspeciales,
   calcularFestivos,
+  calcularTemporadasAltas,
   calendarioMes,
   clasificarNoche,
   cotizar,
@@ -35,6 +37,7 @@ const config: ConfigTarifas = {
   maxAdicionales: 4,
   precioAdicionalAdulto: 90_000,
   precioAdicionalNino: 60_000,
+  precioMascota: 50_000,
   minimoNochesPuente: 1,
   nocheFestivoAlta: false,
 };
@@ -589,6 +592,8 @@ describe("códigos de descuento", () => {
 describe("cabalgata", () => {
   // Estadía del martes 10 al jueves 12 de noviembre (2 noches, 280 000 c/u).
   const datosCab = (libres: Record<string, number> = {}): DatosCabalgata => ({
+    servicioId: 1,
+    nombre: "Cabalgata de prueba",
     precioPersona: 85_000,
     turnos: ["09:00", "15:00"],
     horaCheckin: "15:00:00",
@@ -652,7 +657,7 @@ describe("cabalgata", () => {
     expect(personasCabalgata(6, { adultos: 2, ninos: 1, menores: 1 })).toBe(9);
     const r = agregarCabalgata(
       base(6, { adultos: 1, ninos: 0, menores: 1 }),
-      { fecha: "2026-11-11", turno: "09:00" },
+      { servicio: "cabalgata-prueba", fecha: "2026-11-11", turno: "09:00" },
       datosCab({ "2026-11-11|09:00": 7 }),
     );
     expect(r).toMatchObject({
@@ -664,22 +669,34 @@ describe("cabalgata", () => {
 
   it("rechaza un turno fuera de la estadía o que no existe", () => {
     const invalida = { ok: false, error: "cabalgata_invalida" };
-    expect(agregarCabalgata(base(), { fecha: "2026-11-10", turno: "09:00" }, datosCab())).toEqual(
-      invalida,
-    );
-    expect(agregarCabalgata(base(), { fecha: "2026-11-13", turno: "09:00" }, datosCab())).toEqual(
-      invalida,
-    );
-    expect(agregarCabalgata(base(), { fecha: "2026-11-11", turno: "11:00" }, datosCab())).toEqual(
-      invalida,
-    );
+    expect(
+      agregarCabalgata(
+        base(),
+        { servicio: "cabalgata-prueba", fecha: "2026-11-10", turno: "09:00" },
+        datosCab(),
+      ),
+    ).toEqual(invalida);
+    expect(
+      agregarCabalgata(
+        base(),
+        { servicio: "cabalgata-prueba", fecha: "2026-11-13", turno: "09:00" },
+        datosCab(),
+      ),
+    ).toEqual(invalida);
+    expect(
+      agregarCabalgata(
+        base(),
+        { servicio: "cabalgata-prueba", fecha: "2026-11-11", turno: "11:00" },
+        datosCab(),
+      ),
+    ).toEqual(invalida);
   });
 
   it("rechaza si el grupo no cabe en el turno", () => {
     expect(
       agregarCabalgata(
         base(3),
-        { fecha: "2026-11-11", turno: "09:00" },
+        { servicio: "cabalgata-prueba", fecha: "2026-11-11", turno: "09:00" },
         datosCab({ "2026-11-11|09:00": 2 }),
       ),
     ).toEqual({ ok: false, error: "cabalgata_sin_cupo" });
@@ -697,7 +714,7 @@ describe("cabalgata", () => {
       usosMaximos: null,
       usos: 0,
     };
-    const eleccion = { fecha: "2026-11-11", turno: "15:00" };
+    const eleccion = { servicio: "cabalgata-prueba", fecha: "2026-11-11", turno: "15:00" };
     const primero = aplicarDescuento(base(), codigo, HOY);
     if (!primero.ok) throw new Error(primero.error);
     const a = agregarCabalgata(primero, eleccion, datosCab());
@@ -707,5 +724,80 @@ describe("cabalgata", () => {
     // 560 000 − 84 000 + 2 × 85 000
     expect(a).toMatchObject({ descuento: { monto: 84_000 }, total: 646_000 });
     expect(b).toMatchObject({ descuento: { monto: 84_000 }, total: 646_000 });
+  });
+});
+
+describe("calcularTemporadasAltas", () => {
+  it("2027: Semana Santa según Pascua (28 mar), mitad de año y fin de año hasta enero", () => {
+    expect(calcularTemporadasAltas(2027).map((t) => [t.fechaInicio, t.fechaFin])).toEqual([
+      ["2027-03-19", "2027-03-27"],
+      ["2027-06-15", "2027-07-15"],
+      ["2027-12-15", "2028-01-15"],
+    ]);
+  });
+
+  it("sin precio propio: cobra precioTemporada", () => {
+    const d = datos({ temporadas: calcularTemporadasAltas(2026) });
+    expect(clasificarNoche("2026-04-01", d)).toMatchObject({ tipo: "temporada", precio: 560_000 });
+    expect(clasificarNoche("2026-07-15", d)).toMatchObject({ tipo: "temporada", precio: 560_000 });
+    expect(clasificarNoche("2026-07-16", d).tipo).not.toBe("temporada");
+  });
+});
+
+describe("calcularFechasEspeciales", () => {
+  // Fuente Amor y Amistad 2026: calendariodecolombia.com (tercer sábado de septiembre).
+  it("2026", () => {
+    expect(calcularFechasEspeciales(2026).map((f) => f.fecha)).toEqual([
+      "2026-02-14",
+      "2026-05-10",
+      "2026-06-21",
+      "2026-09-19",
+      "2026-12-07",
+      "2026-12-24",
+      "2026-12-31",
+    ]);
+  });
+
+  it("2027: Día de la Madre 9 may, Día del Padre 20 jun, Amor y Amistad 18 sep", () => {
+    const fechas = calcularFechasEspeciales(2027).map((f) => f.fecha);
+    expect(fechas).toContain("2027-05-09");
+    expect(fechas).toContain("2027-06-20");
+    expect(fechas).toContain("2027-09-18");
+  });
+
+  it("dentro de la temporada alta gana la fecha especial", () => {
+    const ajustes = new Map(
+      calcularFechasEspeciales(2026).map((e): [string, AjusteFecha] => [
+        e.fecha,
+        { fecha: e.fecha, precio: null, especial: true, bloqueada: false },
+      ]),
+    );
+    const d = datos({ temporadas: calcularTemporadasAltas(2026), ajustes });
+    expect(clasificarNoche("2026-12-24", d)).toMatchObject({ tipo: "ajuste", precio: 650_000 });
+    expect(clasificarNoche("2026-06-21", d)).toMatchObject({ tipo: "ajuste", precio: 650_000 });
+    expect(clasificarNoche("2026-12-23", d)).toMatchObject({ tipo: "temporada", precio: 560_000 });
+  });
+});
+
+describe("mascotas", () => {
+  // 10 y 11 nov 2026: martes y miércoles, tarifa base.
+  it("se cobran por mascota y por noche, sin contar como huéspedes", () => {
+    const r = cotizar({ ...estadia("2026-11-10", "2026-11-12", 1), mascotas: 2 }, datos(), HOY);
+    expect(r).toMatchObject({ ok: true, mascotas: 2, extraMascotas: 200_000, personasExtra: 0 });
+    if (r.ok) expect(r.total).toBe(r.subtotal + 200_000);
+  });
+
+  it("sin mascotas no suma nada", () => {
+    const r = cotizar(estadia("2026-11-10", "2026-11-12"), datos(), HOY);
+    expect(r).toMatchObject({ ok: true, mascotas: 0, extraMascotas: 0 });
+  });
+
+  it("rechaza cantidades negativas o decimales", () => {
+    for (const mascotas of [-1, 1.5]) {
+      expect(cotizar({ ...estadia("2026-11-10", "2026-11-12"), mascotas }, datos(), HOY)).toEqual({
+        ok: false,
+        error: "mascotas_invalidas",
+      });
+    }
   });
 });

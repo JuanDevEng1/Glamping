@@ -1,5 +1,7 @@
 // Componentes base de UI (REGLAS_WEB.md §5). Sin estado: sirven en componentes de servidor.
+import Image from "next/image";
 import { MessageCircle, Minus, Plus } from "lucide-react";
+import type { Foto as DatosFoto } from "@lauburu/backend/db";
 import { Container } from "./Container";
 import { enlaceWhatsApp } from "@/lib/sitio";
 
@@ -145,6 +147,61 @@ export function FotoPendiente({
       className={`flex items-end overflow-hidden bg-niebla p-3 md:p-4 ${bloque ? "rounded-block" : "rounded-card"} ${className}`}
     >
       <span className="text-xs text-verde md:text-small">{descripcion}</span>
+    </div>
+  );
+}
+
+/**
+ * Foto real con next/image, o FotoPendiente si aún no tiene `src`.
+ * `className` define el tamaño (p. ej. aspect-[3/2]); `sizes` el ancho que ocupa en pantalla.
+ * El crédito (licencias CC BY) se muestra sobre la foto salvo en miniaturas.
+ */
+export function Foto({
+  foto,
+  sizes,
+  bloque = false,
+  miniatura = false,
+  priority = false,
+  className = "",
+}: {
+  foto: DatosFoto;
+  sizes: string;
+  bloque?: boolean;
+  miniatura?: boolean;
+  priority?: boolean;
+  className?: string;
+}) {
+  if (!foto.src) return <FotoPendiente descripcion={foto.alt} bloque={bloque} className={className} />;
+  const { credito } = foto;
+  return (
+    <div
+      className={`relative overflow-hidden bg-niebla ${bloque ? "rounded-block" : "rounded-card"} ${className}`}
+    >
+      <Image
+        src={foto.src}
+        alt={foto.alt}
+        fill
+        sizes={sizes}
+        priority={priority}
+        className="object-cover"
+      />
+      {credito && !miniatura && (
+        <p className="absolute right-2 bottom-2 rounded-full bg-verde/80 px-2 py-0.5 text-xs text-crema">
+          Foto:{" "}
+          <a href={credito.url} target="_blank" rel="noopener noreferrer" className="underline">
+            {credito.autor}
+          </a>{" "}
+          ·{" "}
+          <a
+            href={credito.licenciaUrl}
+            target="_blank"
+            rel="noopener noreferrer license"
+            className="underline"
+          >
+            {credito.licencia}
+          </a>
+        </p>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
-// Reservas del admin y códigos de descuento contra una BD real (días 700+: no chocan con
-// las fechas de reservas.test.ts ni pagos.test.ts, que corren en paralelo). Solo corre con
+// Reservas del admin y códigos de descuento contra una BD real (días 900+: no chocan con
+// las fechas de reservas, pagos ni pedidos.test.ts, que corren en paralelo). Solo corre con
 // DATABASE_URL_PRUEBAS (una BD de pruebas con las migraciones aplicadas; nunca la de producción).
 import { inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -45,7 +45,7 @@ describe.skipIf(!url)("admin en BD de pruebas", () => {
     const { cotizarEstadia, crearReservaPendiente, obtenerReservaPublica } =
       await import("../src/reservas");
 
-    const { llegada, salida } = await fechas(700);
+    const { llegada, salida } = await fechas(900);
     const r = await crearReservaAdmin({
       origen: "rifa",
       llegada,
@@ -73,6 +73,8 @@ describe.skipIf(!url)("admin en BD de pruebas", () => {
         tipoDocumento: "CC",
         documento: "123456",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     });
@@ -90,7 +92,7 @@ describe.skipIf(!url)("admin en BD de pruebas", () => {
     const { cancelarReservaAdmin, crearReservaAdmin } = await import("../src/admin");
     const { crearReservaPendiente } = await import("../src/reservas");
 
-    const { llegada, salida } = await fechas(710, 3);
+    const { llegada, salida } = await fechas(910, 3);
     const web = await crearReservaPendiente({
       estadia: { llegada, salida, huespedes: 2 },
       huesped: {
@@ -98,13 +100,15 @@ describe.skipIf(!url)("admin en BD de pruebas", () => {
         tipoDocumento: "CC",
         documento: "123456",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     });
     if (!web.ok) throw new Error(`No se creó la reserva web: ${web.error}`);
     codigos.push(web.codigo);
 
-    const { llegada: dentro } = await fechas(711, 1);
+    const { llegada: dentro } = await fechas(911, 1);
     const bloqueo = await crearReservaAdmin({
       origen: "mantenimiento",
       llegada: dentro,
@@ -128,7 +132,7 @@ describe.skipIf(!url)("admin en BD de pruebas", () => {
       await crearReservaAdmin({ origen: "mantenimiento", ...pasado, motivo: "Reparación" }),
     ).toEqual({ ok: false, error: "fechas_invalidas" });
 
-    const futuro = await fechas(720);
+    const futuro = await fechas(920);
     expect(
       await crearReservaAdmin({ origen: "cortesia", ...futuro, motivo: "Regalo" }),
     ).toMatchObject({

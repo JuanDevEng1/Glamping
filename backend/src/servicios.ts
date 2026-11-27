@@ -21,6 +21,7 @@ export const UNIDADES_PRECIO = {
   pareja: "por pareja",
   trayecto: "por trayecto",
   unidad: "por unidad",
+  caballo: "por caballo",
 } as const;
 
 export type UnidadPrecio = keyof typeof UNIDADES_PRECIO;

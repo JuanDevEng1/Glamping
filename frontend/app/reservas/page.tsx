@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { obtenerConfiguracion } from "@lauburu/backend/db";
 import { hoyEnBogota, trmParaCobro } from "@lauburu/backend/moneda";
+import { clienteOpenpay } from "@lauburu/backend/openpay";
 import { clientePaypal } from "@lauburu/backend/paypal";
 import { TIPOS_DOCUMENTO } from "@lauburu/backend/reservas";
 import { FlujoReserva } from "@/components/reserva/FlujoReserva";
@@ -34,14 +35,17 @@ export default async function Reservas() {
         maxAdicionales: config.maxAdicionales,
         precioAdicionalAdulto: config.precioAdicionalAdulto,
         precioAdicionalNino: config.precioAdicionalNino,
+        precioMascota: config.precioMascota,
         horaCheckin: config.horaCheckin,
         horaCheckout: config.horaCheckout,
         minutosHold: config.minutosHold,
+        montoDeposito: config.montoDeposito,
       }}
       tiposDocumento={TIPOS_DOCUMENTO}
       trm={trm}
       hoy={hoyEnBogota()}
       paypal={trm ? clientePaypal() : null}
+      openpay={clienteOpenpay()}
     />
   );
 }

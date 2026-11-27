@@ -1,8 +1,23 @@
-// Carga los festivos de Colombia 2026–2028 (sin sobrescribir los editados en el panel).
-// Con --ejemplo también crea configuración, temporadas y servicio DE PRUEBA para desarrollo local.
+// Carga los festivos, las temporadas altas y las fechas especiales de Colombia 2026–2028 sin
+// sobrescribir lo que ya exista, y el catálogo real de cabalgatas.
+// Con --ejemplo también crea la configuración de tarifas DE PRUEBA.
 // Uso: npm run db:seed            ·  npm run db:seed:ejemplo
-import { aliados, configuracion, festivos, getDb, servicios, temporadas } from "../src/db";
-import { calcularFestivos } from "../src/precios";
+import { eq, like } from "drizzle-orm";
+import {
+  ajustesFecha,
+  aliados,
+  configuracion,
+  festivos,
+  getDb,
+  servicios,
+  temporadas,
+  type Foto,
+} from "../src/db";
+import {
+  calcularFechasEspeciales,
+  calcularFestivos,
+  calcularTemporadasAltas,
+} from "../src/precios";
 
 try {
   process.loadEnvFile("../frontend/.env.local");
@@ -12,94 +27,148 @@ try {
 
 const db = getDb();
 
-const filas = [2026, 2027, 2028].flatMap(calcularFestivos);
+const ANIOS = [2026, 2027, 2028];
+
+const filas = ANIOS.flatMap(calcularFestivos);
 await db.insert(festivos).values(filas).onConflictDoNothing();
 console.log(`Festivos: ${filas.length} revisados (los existentes no se modifican).`);
 
+// Las temporadas de ejemplo de versiones anteriores se cruzan con las reales.
+await db.delete(temporadas).where(like(temporadas.nombre, "%(ejemplo)"));
+const nombresTemporadas = new Set(
+  (await db.select({ nombre: temporadas.nombre }).from(temporadas)).map((t) => t.nombre),
+);
+const nuevasTemporadas = ANIOS.flatMap(calcularTemporadasAltas).filter(
+  (t) => !nombresTemporadas.has(t.nombre),
+);
+if (nuevasTemporadas.length > 0) await db.insert(temporadas).values(nuevasTemporadas);
+console.log(`Temporadas altas: ${nuevasTemporadas.length} nuevas.`);
+
+// Una fecha con ajuste propio (precio o bloqueo) no se modifica.
+const especiales = ANIOS.flatMap(calcularFechasEspeciales);
+await db
+  .insert(ajustesFecha)
+  .values(especiales.map((e) => ({ fecha: e.fecha, especial: true, motivo: e.nombre })))
+  .onConflictDoNothing();
+console.log(`Fechas especiales: ${especiales.length} revisadas (las existentes no se modifican).`);
+
 if (process.argv.includes("--ejemplo")) {
   // Tarifas del glamping; temporada alta, fecha especial y adicionales usan los valores por
-  // defecto de la tabla (560 000, 650 000, 90 000 y 60 000). Las temporadas son de ejemplo.
+  // defecto de la tabla (560 000, 650 000, 90 000 y 60 000).
   await db
     .insert(configuracion)
     .values({ precioBase: 420_000, precioAlto: 490_000, precioPersonaExtra: 60_000 })
     .onConflictDoNothing();
-  const existentes = await db.select({ id: temporadas.id }).from(temporadas).limit(1);
-  if (existentes.length === 0) {
-    await db.insert(temporadas).values([
-      {
-        nombre: "Fin de año (ejemplo)",
-        fechaInicio: "2026-12-15",
-        fechaFin: "2027-01-15",
-        precioNoche: null,
-        precioPersonaExtra: 80_000,
-        minimoNoches: 2,
-      },
-      {
-        nombre: "Semana Santa (ejemplo)",
-        fechaInicio: "2027-03-20",
-        fechaFin: "2027-03-28",
-        precioNoche: null,
-        precioPersonaExtra: null,
-        minimoNoches: 2,
-      },
-    ]);
-  }
-  console.log("Configuración y temporadas de ejemplo listas.");
-
-  if ((await db.select({ id: servicios.id }).from(servicios).limit(1)).length === 0) {
-    await sembrarServicios();
-    console.log("Aliado y cabalgata de ejemplo listos (6 personas por turno).");
-  }
+  console.log("Configuración lista.");
 }
+
+await sembrarCabalgatas();
 
 await db.$client.end();
 
 // ---------------------------------------------------------------------------
-// Servicio DE EJEMPLO (tomados de las maquetas). TODO(cliente): aliados, textos y precios reales.
+// Catálogo real: cabalgatas que opera el glamping. Idempotente (upsert por slug).
+// Los caballos por día salen de servicios.capacidadTurno (6 por defecto) y no se cargan fechas:
+// para cerrar un día o cambiar la capacidad, npm run admin -- cabalgata cerrar|capacidad.
 // ---------------------------------------------------------------------------
 
-async function sembrarServicios() {
-  const [finca, cocina, transporte] = await db
-    .insert(aliados)
-    .values([
-      { nombre: "Finca aliada de la vereda (ejemplo)", correo: "finca@example.com" },
-      { nombre: "Cocina del glamping (ejemplo)", correo: "cocina@example.com" },
-      { nombre: "Transporte rural (ejemplo)", correo: "transporte@example.com" },
-    ])
-    .returning({ id: aliados.id });
+async function sembrarCabalgatas() {
+  const CABALLOS = 6;
 
-  await db.insert(servicios).values([
-    {
-      slug: "cabalgata-al-mirador",
-      aliadoId: finca!.id,
-      nombre: "Cabalgata al mirador",
-      categoria: "tours",
-      resumen: "A caballo entre cafetales y bosque de niebla hasta un mirador de la vereda.",
-      descripcion:
-        "Recorre a caballo los caminos de herradura de la vereda Cuchilla del Salado, entre cafetales y bosque de niebla, hasta un mirador con vista a las montañas de Manizales. Te acompaña un guía local todo el camino.",
-      precio: 85_000,
-      unidadPrecio: "persona",
-      tipoStock: "cupos",
-      maxPorPedido: 4,
-      orden: 1,
-      duracion: "2 horas y media",
-      nivel: "Moderado, apto para principiantes",
-      puntoEncuentro: "Entrada del glamping",
-      turnos: ["09:00", "15:00"],
-      incluye: [
-        "Caballo manso con montura",
-        "Casco de protección",
-        "Guía local durante el recorrido",
-      ],
-      noIncluye: ["Propinas para el guía", "Calzado cerrado y ropa para lluvia"],
-      capacidadTurno: 6,
-      fotos: [
-        "Caballos en un sendero de montaña con bosque de niebla",
-        "Vista panorámica desde el mirador",
-        "Guía local junto a los caballos",
-      ],
+  const correo = (process.env.CORREO_ADMIN ?? "").split(",")[0]?.trim();
+  if (!correo) {
+    throw new Error("Falta CORREO_ADMIN: es el correo del aliado 'Lauburu Glamping'.");
+  }
+
+  const nombreAliado = "Lauburu Glamping";
+  const [existente] = await db
+    .select({ id: aliados.id })
+    .from(aliados)
+    .where(eq(aliados.nombre, nombreAliado))
+    .limit(1);
+  const aliadoId =
+    existente?.id ??
+    (
+      await db
+        .insert(aliados)
+        .values({ nombre: nombreAliado, correo })
+        .returning({ id: aliados.id })
+    )[0]!.id;
+
+  const comunes = {
+    aliadoId,
+    categoria: "tours",
+    unidadPrecio: "caballo",
+    tipoStock: "cupos",
+    stock: null,
+    maxPorPedido: CABALLOS,
+    incluidoOExtra: "extra",
+    activo: true,
+    // TODO(cliente): nivel, punto de encuentro y edad mínima.
+    nivel: null,
+    puntoEncuentro: null,
+    turnos: [],
+    incluye: ["Caballo ensillado y listo para montar", "Una persona que te guía y acompaña"],
+    noIncluye: [],
+    condiciones: [],
+  } satisfies Partial<typeof servicios.$inferInsert>;
+
+  // TODO(cliente): fotos propias. Estas son provisionales (en frontend/public/servicios).
+  const fotoBosque: Foto = {
+    src: "/servicios/cabalgata-pexels.jpg", // Licencia de Pexels: no exige crédito.
+    alt: "Dos jinetes a caballo por un camino de bosque, en blanco y negro",
+  };
+  const fotoEucaliptos: Foto = {
+    src: "/servicios/cabalgata-pexels-2.jpg", // Licencia de Pexels: no exige crédito.
+    alt: "Jinetes en fila por un sendero entre eucaliptos, con montañas al fondo",
+  };
+  const fotoSendero: Foto = {
+    src: "/servicios/cabalgata-juanedc.jpg",
+    alt: "Jinetes en fila por un sendero de pasto verde entre montañas, vistos desde un caballo",
+    credito: {
+      autor: "Juanedc",
+      url: "https://www.flickr.com/photos/juanedc/8990996856/",
+      licencia: "CC BY 2.0",
+      licenciaUrl: "https://creativecommons.org/licenses/by/2.0/",
     },
-  ]);
-  // Sin cupos por fecha: la cabalgata usa capacidadTurno todos los días. Para cerrar un día o
-  // cambiar su capacidad: npm run admin -- cabalgata cerrar|capacidad.
+  };
+
+  const cabalgatas: (typeof servicios.$inferInsert)[] = [
+    {
+      ...comunes,
+      slug: "cabalgata-30-minutos",
+      nombre: "Cabalgata de 30 minutos",
+      resumen: "Un paseo corto a caballo por los caminos de la vereda, con guía.",
+      descripcion:
+        "Recorre a caballo los caminos de la vereda Cuchilla del Salado. Te entregamos el caballo ensillado y listo para montar, y una persona te acompaña y guía todo el camino. La hora la coordinamos contigo por WhatsApp.",
+      precio: 60_000,
+      orden: 1,
+      duracion: "30 minutos",
+      fotos: [fotoBosque, fotoSendero],
+    },
+    {
+      ...comunes,
+      slug: "cabalgata-hora-y-media",
+      nombre: "Cabalgata de 1 hora y media",
+      resumen: "Un recorrido largo a caballo entre las montañas de la vereda, con guía.",
+      descripcion:
+        "Tómate tu tiempo para recorrer a caballo los caminos y paisajes de la vereda Cuchilla del Salado. Te entregamos el caballo ensillado y listo para montar, y una persona te acompaña y guía todo el camino. La hora la coordinamos contigo por WhatsApp.",
+      precio: 150_000,
+      orden: 2,
+      duracion: "1 hora y media",
+      fotos: [fotoEucaliptos, fotoBosque],
+    },
+  ];
+
+  for (const { slug, ...datos } of cabalgatas) {
+    await db
+      .insert(servicios)
+      .values({ slug, ...datos })
+      .onConflictDoUpdate({
+        target: servicios.slug,
+        set: datos,
+      });
+  }
+
+  console.log("Cabalgatas listas.");
 }

@@ -9,12 +9,16 @@ import {
   ArrowRight,
   Check,
   CircleAlert,
+  CircleCheck,
+  Car,
   Clock,
   Minus,
   PawPrint,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import type { Trm } from "@lauburu/backend/moneda";
+import type { ClienteOpenpay } from "@lauburu/backend/openpay";
 import type { ClientePaypal } from "@lauburu/backend/paypal";
 import {
   SIN_ADICIONALES,
@@ -34,18 +38,25 @@ import type {
 } from "@lauburu/backend/reservas";
 import { useRouter } from "next/navigation";
 import {
+  autorizarDepositoReserva,
   cabalgataDeEstadia,
   capturarPagoReserva,
   cotizar,
   crearReserva,
+  depositoTarjetaReserva,
+  iniciarDepositoReserva,
   iniciarPagoReserva,
+  iniciarPseReserva,
   liberarReserva,
+  pagarTarjetaReserva,
 } from "@/app/reservas/acciones";
 import { Container } from "@/components/Container";
 import { NotaMoneda, Precio } from "@/components/Moneda";
 import { BotonPaypal, MedioPaypal } from "@/components/pago/BotonPaypal";
+import { MedioPago } from "@/components/pago/MedioPago";
+import { BotonPse, FormularioTarjeta } from "@/components/pago/Openpay";
 import { FotoPendiente, claseBoton } from "@/components/ui";
-import { formatoFechaCorta, formatoHora } from "@/lib/formato";
+import { formatoFechaCorta, formatoHora, formatoPrecio } from "@/lib/formato";
 import { enlaceWhatsApp } from "@/lib/sitio";
 import { Calendario } from "./Calendario";
 
@@ -59,10 +70,16 @@ export type ConfigFlujo = {
   maxAdicionales: number;
   precioAdicionalAdulto: number;
   precioAdicionalNino: number;
+  precioMascota: number;
   horaCheckin: string;
   horaCheckout: string;
   minutosHold: number;
+  /** Depósito de garantía obligatorio, que se autoriza en el paso de pago antes del cobro (0 = sin depósito). */
+  montoDeposito: number;
 };
+
+/** Tope técnico de backend/src/reservas.ts (esquemaEstadia); no hay límite de negocio. */
+const MAX_MASCOTAS = 20;
 
 const PASOS = ["Fechas", "Huéspedes", "Datos", "Pago", "Confirmación"] as const;
 
@@ -84,6 +101,9 @@ type Datos = {
   pais: string;
   ciudad: string;
   comentarios: string;
+  alergias: string;
+  contactoEmergencia: string;
+  telefonoEmergencia: string;
   aceptaTerminos: boolean;
   aceptaMarketing: boolean;
 };
@@ -97,6 +117,9 @@ const datosIniciales: Datos = {
   pais: "Colombia",
   ciudad: "",
   comentarios: "",
+  alergias: "",
+  contactoEmergencia: "",
+  telefonoEmergencia: "",
   aceptaTerminos: false,
   aceptaMarketing: false,
 };
@@ -116,8 +139,8 @@ function mensajeCodigo(motivo?: MotivoCodigoInvalido) {
 
 function mensajeCabalgata(error: "cabalgata_invalida" | "cabalgata_sin_cupo") {
   return error === "cabalgata_sin_cupo"
-    ? "Ya no quedan cupos para todo el grupo en ese turno. Elige otro día u hora."
-    : "La cabalgata que elegiste ya no coincide con tu estadía. Elige otro día u hora.";
+    ? "Ya no quedan caballos para todo el grupo ese día. Elige otro día u otra cabalgata."
+    : "La cabalgata que elegiste ya no coincide con tu estadía. Elige otro día u otra cabalgata.";
 }
 
 const esErrorCabalgata = (error: string): error is "cabalgata_invalida" | "cabalgata_sin_cupo" =>
@@ -138,6 +161,10 @@ function mensajeError(r: Exclude<ResultadoCotizacion | ResultadoCrear, { ok: tru
       return `Pueden alojarse de 1 a ${max} personas.`;
     case "adicionales_invalidos":
       return "Revisa los acompañantes adicionales: superan los lugares disponibles.";
+    case "mascotas_invalidas":
+      return "Revisa el número de mascotas.";
+    case "demasiadas_peticiones":
+      return "Hiciste muchos intentos seguidos. Espera un momento y vuelve a intentarlo.";
     case "sin_configuracion":
       return "Las reservas en línea aún no están habilitadas. Escríbenos por WhatsApp y te ayudamos.";
     case "datos_invalidos":
@@ -345,6 +372,13 @@ function Desglose({ cot, trm }: { cot: Cotizacion; trm: number | null }) {
             trm={trm}
           />
         )}
+        {cot.mascotas > 0 && (
+          <LineaAdicional
+            texto={`${cot.mascotas} ${cot.mascotas === 1 ? "mascota" : "mascotas"} × ${n} ${n === 1 ? "noche" : "noches"}`}
+            cop={cot.extraMascotas}
+            trm={trm}
+          />
+        )}
         {cot.descuento && (
           <li className="flex items-baseline justify-between gap-4 py-2 text-small">
             <span>
@@ -360,7 +394,7 @@ function Desglose({ cot, trm }: { cot: Cotizacion; trm: number | null }) {
         )}
         {cot.cabalgata && (
           <LineaAdicional
-            texto={`Cabalgata · ${cot.cabalgata.personas} ${cot.cabalgata.personas === 1 ? "persona" : "personas"}`}
+            texto={`${cot.cabalgata.nombre} · ${cot.cabalgata.personas} ${cot.cabalgata.personas === 1 ? "caballo" : "caballos"}`}
             detalle={`${formatoFechaCorta(cot.cabalgata.fecha)}${cot.cabalgata.turno ? `, ${formatoHora(cot.cabalgata.turno)}` : ""}`}
             cop={cot.cabalgata.subtotal}
             trm={trm}
@@ -383,6 +417,7 @@ function Resumen({
   salida,
   huespedes,
   adicionales,
+  mascotas,
   cot,
   trm,
   conDesglose,
@@ -393,6 +428,7 @@ function Resumen({
   salida?: string;
   huespedes: number;
   adicionales: Adicionales;
+  mascotas: number;
   cot: Cotizacion | null;
   trm: Trm | null;
   conDesglose: boolean;
@@ -403,7 +439,7 @@ function Resumen({
       aria-labelledby="resumen-titulo"
       className="rounded-card border border-niebla bg-blanco p-5 md:p-6 lg:sticky lg:top-24"
     >
-      <FotoPendiente descripcion="Vista del glamping" className="aspect-[3/2]" />
+      <FotoPendiente descripcion="Vista del glamping" className="aspect-3/2" />
       <h2 id="resumen-titulo" className="mt-4 font-serif text-h3 text-verde">
         Resumen de tu reserva
       </h2>
@@ -426,6 +462,12 @@ function Resumen({
           <dt className="font-medium text-verde">Huéspedes</dt>
           <dd>{textoPersonas(huespedes, adicionales)}</dd>
         </div>
+        {mascotas > 0 && (
+          <div>
+            <dt className="font-medium text-verde">Mascotas</dt>
+            <dd>{mascotas}</dd>
+          </div>
+        )}
       </dl>
 
       {cot && (
@@ -530,8 +572,9 @@ export function CuentaRegresiva({
 }
 
 /**
- * Cabalgata opcional para todo el grupo: elegir día y turno de la estadía. Los cupos y el
- * precio vienen del servidor (obtenerCabalgata) y se vuelven a validar al cotizar.
+ * Cabalgata opcional para todo el grupo (un caballo por persona): elegir cuál y el día de la
+ * estadía. Los cupos y el precio vienen del servidor (obtenerCabalgata) y se vuelven a validar
+ * al cotizar.
  */
 function TarjetaCabalgata({
   info,
@@ -552,16 +595,31 @@ function TarjetaCabalgata({
   onElegir: (eleccion: EleccionCabalgata) => void;
   onQuitar: () => void;
 }) {
-  const disponibles = info.opciones.filter((o) => o.turnos.some((t) => t.alcanza));
+  const n = info.personas;
+  const caballos = `${n} ${n === 1 ? "caballo" : "caballos"}`;
+  const opciones = info.cabalgatas.map((c) => ({
+    ...c,
+    disponibles: c.dias.filter((d) => d.turnos.some((t) => t.alcanza)),
+  }));
+  const [slug, setSlug] = useState("");
   const [fecha, setFecha] = useState("");
   const [turno, setTurno] = useState("");
-  const dia = disponibles.find((o) => o.fecha === fecha);
+  const elegida = opciones.find((c) => c.slug === slug);
+  const dia = elegida?.disponibles.find((d) => d.fecha === fecha);
   const sinTurnos = dia?.turnos.length === 1 && dia.turnos[0]!.turno === "";
-  const n = info.personas;
+  const agregada = eleccion && info.cabalgatas.find((c) => c.slug === eleccion.servicio);
+
+  function elegirCabalgata(valor: string) {
+    setSlug(valor);
+    setFecha("");
+    setTurno("");
+  }
 
   function elegirDia(valor: string) {
     setFecha(valor);
-    const libres = disponibles.find((o) => o.fecha === valor)?.turnos.filter((t) => t.alcanza);
+    const libres = elegida?.disponibles
+      .find((d) => d.fecha === valor)
+      ?.turnos.filter((t) => t.alcanza);
     setTurno(libres?.length === 1 ? libres[0]!.turno : "");
   }
 
@@ -571,47 +629,28 @@ function TarjetaCabalgata({
       className="mt-6 rounded-card border border-niebla bg-blanco p-5 md:p-6"
     >
       <h3 id="cabalgata-titulo" className="font-serif text-h3 text-verde">
-        {info.nombre} <span className="font-sans text-small text-cafe">(opcional)</span>
+        Cabalgata <span className="font-sans text-small text-cafe">(opcional)</span>
       </h3>
-      <p className="mt-2 max-w-[65ch] text-small">{info.resumen}</p>
-      {(info.duracion || info.puntoEncuentro) && (
-        <p className="mt-1 text-xs">
-          {[info.duracion, info.puntoEncuentro && `Salida: ${info.puntoEncuentro}`]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      )}
-      {info.incluye.length > 0 && (
-        <p className="mt-1 text-xs">Incluye: {info.incluye.join(" · ")}</p>
-      )}
-      {info.condiciones.map((c) => (
-        <p key={c.titulo} className="mt-1 text-xs">
-          <strong className="font-medium text-verde">{c.titulo}:</strong> {c.texto}
-        </p>
-      ))}
-      <p className="mt-3 max-w-[65ch] text-small">
-        Va todo el grupo: {n} {n === 1 ? "persona" : "personas"} ×{" "}
-        <Precio cop={info.precioPersona} trm={trm} /> ={" "}
-        <strong className="font-medium text-verde">
-          <Precio cop={n * info.precioPersona} trm={trm} />
-        </strong>
-        .{menores > 0 && " Los menores de 4 años no montan ni pagan."}
+      <p className="mt-2 max-w-[65ch] text-small">
+        Va todo el grupo: {caballos}, uno por persona.
+        {menores > 0 && " Los menores de 4 años no montan ni pagan."} La hora la coordinamos contigo
+        por WhatsApp.
       </p>
 
-      {eleccion ? (
+      {agregada && eleccion ? (
         <p className="mt-4 flex flex-wrap items-center gap-2 text-small">
           <Check size={20} strokeWidth={1.5} className="shrink-0 text-verde" aria-hidden />
           <span>
-            Agregada para el {formatoFechaCorta(eleccion.fecha)}
+            Agregaste la {agregada.nombre.toLowerCase()} para el {formatoFechaCorta(eleccion.fecha)}
             {eleccion.turno && ` a las ${formatoHora(eleccion.turno)}`}.
           </span>
           <button type="button" onClick={onQuitar} className={claseBoton("texto")}>
             Quitar
           </button>
         </p>
-      ) : disponibles.length === 0 ? (
+      ) : opciones.every((c) => c.disponibles.length === 0) ? (
         <p className="mt-4 max-w-[65ch] text-small">
-          No quedan cupos para todo el grupo en tus fechas. Escríbenos por{" "}
+          No quedan caballos para todo el grupo en tus fechas. Escríbenos por{" "}
           <a
             href={enlaceWhatsApp("Hola, quiero preguntar por la cabalgata en Lauburu Glamping")}
             target="_blank"
@@ -624,21 +663,65 @@ function TarjetaCabalgata({
         </p>
       ) : (
         <div className="mt-4 flex flex-col gap-4">
-          <Campo id="campo-cabalgata-dia" etiqueta="Día" className="max-w-xs">
-            <select
-              id="campo-cabalgata-dia"
-              value={fecha}
-              onChange={(e) => elegirDia(e.target.value)}
-              className={claseCampo(false)}
-            >
-              <option value="">Elige un día</option>
-              {disponibles.map((o) => (
-                <option key={o.fecha} value={o.fecha}>
-                  {formatoFechaCorta(o.fecha)}
-                </option>
-              ))}
-            </select>
-          </Campo>
+          <fieldset>
+            <legend className="text-small font-medium text-verde">¿Cuál prefieren?</legend>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {opciones.map((c) => {
+                const sinCupo = c.disponibles.length === 0;
+                return (
+                  <label
+                    key={c.slug}
+                    className={`flex flex-col gap-1 rounded-card border-[1.5px] p-4 text-small ${
+                      sinCupo
+                        ? "border-niebla opacity-50"
+                        : "cursor-pointer border-niebla has-[:checked]:border-verde has-[:checked]:bg-verde-tinte"
+                    }`}
+                  >
+                    <span className="flex items-start gap-2">
+                      <input
+                        type="radio"
+                        name="cabalgata-servicio"
+                        value={c.slug}
+                        checked={slug === c.slug}
+                        disabled={sinCupo}
+                        onChange={() => elegirCabalgata(c.slug)}
+                        className="mt-1 size-4 shrink-0 accent-verde"
+                      />
+                      <span className="font-medium text-verde">{c.nombre}</span>
+                    </span>
+                    <span>{c.resumen}</span>
+                    <span>
+                      <Precio cop={c.precioPersona} trm={trm} /> por caballo ·{" "}
+                      <strong className="font-medium text-verde">
+                        <Precio cop={n * c.precioPersona} trm={trm} />
+                      </strong>{" "}
+                      para el grupo
+                    </span>
+                    {sinCupo && <span>Sin caballos para tus fechas</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          {elegida && (
+            <Campo id="campo-cabalgata-dia" etiqueta="Día" className="max-w-xs">
+              <select
+                id="campo-cabalgata-dia"
+                value={fecha}
+                onChange={(e) => elegirDia(e.target.value)}
+                className={claseCampo(false)}
+              >
+                <option value="">Elige un día</option>
+                {elegida.disponibles.map((d) => (
+                  <option key={d.fecha} value={d.fecha}>
+                    {formatoFechaCorta(d.fecha)}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+          )}
+
           {dia && !sinTurnos && (
             <fieldset>
               <legend className="text-small font-medium text-verde">Hora</legend>
@@ -662,16 +745,17 @@ function TarjetaCabalgata({
                       className="sr-only"
                     />
                     {formatoHora(t.turno)}
-                    {!t.alcanza && " · sin cupo para el grupo"}
+                    {!t.alcanza && " · sin caballos para el grupo"}
                   </label>
                 ))}
               </div>
             </fieldset>
           )}
+
           <button
             type="button"
-            disabled={!dia || (!sinTurnos && !turno) || cargando}
-            onClick={() => onElegir({ fecha, turno: sinTurnos ? "" : turno })}
+            disabled={!elegida || !dia || (!sinTurnos && !turno) || cargando}
+            onClick={() => onElegir({ servicio: slug, fecha, turno: sinTurnos ? "" : turno })}
             className={`${claseBoton("secundario")} self-start`}
           >
             {cargando
@@ -782,6 +866,7 @@ export function FlujoReserva({
   trm,
   hoy,
   paypal,
+  openpay,
 }: {
   config: ConfigFlujo;
   /** TIPOS_DOCUMENTO de backend/src/reservas.ts (el cliente no puede importar ese módulo). */
@@ -790,6 +875,8 @@ export function FlujoReserva({
   hoy: string;
   /** Null si PayPal no está configurado o no hay TRM utilizable. */
   paypal: ClientePaypal | null;
+  /** Null si Openpay no está configurado. */
+  openpay: ClienteOpenpay | null;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState(1);
@@ -800,6 +887,7 @@ export function FlujoReserva({
   );
   // Solo cuentan con el grupo base completo; si baja de maxHuespedes se descartan.
   const [adicionalesElegidos, setAdicionales] = useState<Adicionales>(SIN_ADICIONALES);
+  const [mascotas, setMascotas] = useState(0);
   const grupoCompleto = huespedes >= config.maxHuespedes && config.maxAdicionales > 0;
   const adicionales = grupoCompleto ? adicionalesElegidos : SIN_ADICIONALES;
   const lugaresLibres = config.maxAdicionales - totalAdicionales(adicionales);
@@ -818,6 +906,10 @@ export function FlujoReserva({
   const [aviso, setAviso] = useState<string | null>(null);
   const [reserva, setReserva] = useState<{ codigo: string; expiraEn: string } | null>(null);
   const [holdVencido, setHoldVencido] = useState(false);
+  /** Pasarela con la que ya se autorizó el depósito de esta reserva (el pago va por la misma). */
+  const [deposito, setDeposito] = useState<"openpay" | "paypal" | null>(null);
+  /** Dentro de Openpay: tarjeta (depósito y pago en un clic) o PSE (depósito con tarjeta y luego PSE). */
+  const [modoOpenpay, setModoOpenpay] = useState<"tarjeta" | "pse">("tarjeta");
   const [version, setVersion] = useState(0);
   const [enviando, iniciar] = useTransition();
   const titulo = useRef<HTMLHeadingElement>(null);
@@ -825,6 +917,9 @@ export function FlujoReserva({
 
   const trmValor = trm?.valor ?? null;
   const cot = cotizacion?.ok ? cotizacion : null;
+  const conDeposito = config.montoDeposito > 0;
+  const faltaDeposito = conDeposito && !deposito;
+  const montoDeposito = formatoPrecio(config.montoDeposito, "COP", null);
 
   // Cotización en el servidor cada vez que cambian fechas o huéspedes.
   const { adultos, ninos, menores } = adicionales;
@@ -840,6 +935,7 @@ export function FlujoReserva({
       salida,
       huespedes,
       adicionales: { adultos, ninos, menores },
+      mascotas,
       codigo: codigo ?? undefined,
       cabalgata: cabalgata ?? undefined,
     })
@@ -867,7 +963,7 @@ export function FlujoReserva({
     return () => {
       vigente = false;
     };
-  }, [llegada, salida, huespedes, adultos, ninos, menores, codigo, cabalgata]);
+  }, [llegada, salida, huespedes, adultos, ninos, menores, mascotas, codigo, cabalgata]);
 
   // Días, turnos y cupos de la cabalgata para la estadía y el grupo elegidos.
   useEffect(() => {
@@ -932,6 +1028,7 @@ export function FlujoReserva({
           salida,
           huespedes,
           adicionales,
+          mascotas,
           codigo: codigo ?? undefined,
           cabalgata: cabalgata ?? undefined,
         },
@@ -941,6 +1038,7 @@ export function FlujoReserva({
         setReserva({ codigo: r.codigo, expiraEn: r.expiraEn });
         setCotizacion(r.cotizacion);
         setHoldVencido(false);
+        setDeposito(null);
         setErrores({});
         setPaso(4);
         return;
@@ -1057,16 +1155,12 @@ export function FlujoReserva({
                 {tituloPaso("¿Cuántas personas vienen?")}
                 <p className="mt-2">De 1 a {config.maxHuespedes} personas, de cualquier edad.</p>
                 <p className="mt-4 flex max-w-[65ch] items-start gap-3 rounded-card border border-miel bg-blanco p-4 text-small">
-                  <PawPrint
-                    size={20}
-                    strokeWidth={1.5}
-                    className="shrink-0 text-verde"
-                    aria-hidden
-                  />
+                  <Car size={20} strokeWidth={1.5} className="shrink-0 text-verde" aria-hidden />
                   <span>
-                    <strong className="font-medium text-verde">Lauburu no admite mascotas.</strong>{" "}
-                    Si viajas con la tuya, te recomendamos dejarla al cuidado de alguien de
-                    confianza para que disfrutes tu estadía con tranquilidad.
+                    <strong className="font-medium text-verde">Parqueadero:</strong> hay espacio
+                    para 3 carros o 6 motos.{" "}
+                    <strong className="font-medium text-verde">Malla catamarán:</strong> resiste
+                    hasta 180 kg en total al mismo tiempo.
                   </span>
                 </p>
 
@@ -1183,6 +1277,31 @@ export function FlujoReserva({
                     </ul>
                   </fieldset>
                 )}
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-card border border-niebla bg-blanco p-5 md:p-6">
+                  <span className="flex items-start gap-3">
+                    <PawPrint
+                      size={20}
+                      strokeWidth={1.5}
+                      className="mt-1 shrink-0 text-verde"
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="block font-medium text-verde">¿Viajas con tu mascota?</span>
+                      <span className="block text-small">
+                        Es bienvenida: <Precio cop={config.precioMascota} trm={trmValor} /> por
+                        mascota, por noche
+                      </span>
+                    </span>
+                  </span>
+                  <Contador
+                    etiqueta="Mascotas"
+                    valor={mascotas}
+                    min={0}
+                    max={MAX_MASCOTAS}
+                    onCambio={(v) => setMascotas(Math.max(0, v))}
+                  />
+                </div>
 
                 {infoCabalgata && (
                   <TarjetaCabalgata
@@ -1367,9 +1486,60 @@ export function FlujoReserva({
                   </Campo>
 
                   <Campo
+                    id="campo-alergias"
+                    etiqueta="Alergias o restricciones alimentarias (opcional)"
+                    ayuda={`De cualquier persona del grupo, para tenerlo en cuenta en las comidas. ${datos.alergias.length}/300`}
+                    error={err("alergias")}
+                    className="sm:col-span-2"
+                  >
+                    <textarea
+                      id="campo-alergias"
+                      rows={2}
+                      maxLength={300}
+                      value={datos.alergias}
+                      onChange={(e) => actualizar("alergias", e.target.value)}
+                      aria-invalid={!!err("alergias")}
+                      aria-describedby={describe("alergias", true)}
+                      className={`${claseCampo(!!err("alergias"))} h-auto py-3`}
+                    />
+                  </Campo>
+
+                  <Campo
+                    id="campo-contactoEmergencia"
+                    etiqueta="Contacto de emergencia"
+                    ayuda="Nombre de alguien que no venga contigo"
+                    error={err("contactoEmergencia")}
+                  >
+                    <input
+                      id="campo-contactoEmergencia"
+                      value={datos.contactoEmergencia}
+                      onChange={(e) => actualizar("contactoEmergencia", e.target.value)}
+                      aria-invalid={!!err("contactoEmergencia")}
+                      aria-describedby={describe("contactoEmergencia", true)}
+                      className={claseCampo(!!err("contactoEmergencia"))}
+                    />
+                  </Campo>
+
+                  <Campo
+                    id="campo-telefonoEmergencia"
+                    etiqueta="Celular del contacto de emergencia"
+                    error={err("telefonoEmergencia")}
+                  >
+                    <input
+                      id="campo-telefonoEmergencia"
+                      type="tel"
+                      value={datos.telefonoEmergencia}
+                      onChange={(e) => actualizar("telefonoEmergencia", e.target.value)}
+                      aria-invalid={!!err("telefonoEmergencia")}
+                      aria-describedby={describe("telefonoEmergencia")}
+                      className={claseCampo(!!err("telefonoEmergencia"))}
+                    />
+                  </Campo>
+
+                  <Campo
                     id="campo-comentarios"
                     etiqueta="Comentarios o peticiones especiales (opcional)"
-                    ayuda={`Hora estimada de llegada, alimentación, celebraciones… ${datos.comentarios.length}/300`}
+                    ayuda={`Hora estimada de llegada, celebraciones… ${datos.comentarios.length}/300`}
                     error={err("comentarios")}
                     className="sm:col-span-2"
                   >
@@ -1449,6 +1619,36 @@ export function FlujoReserva({
               <div>
                 {tituloPaso("Pago")}
 
+                {conDeposito && (
+                  <div className="mt-4 rounded-card border border-miel bg-blanco p-4 md:p-6">
+                    <p className="flex items-center gap-2 font-medium text-verde">
+                      <ShieldCheck size={24} strokeWidth={1.5} className="shrink-0" aria-hidden />
+                      Depósito de garantía de {montoDeposito}
+                    </p>
+                    <p className="mt-2 max-w-[65ch]">
+                      Para completar tu reserva, antes de pagar autorizas una retención de{" "}
+                      {montoDeposito}, igual sin importar cuántas noches te quedes. No es un cobro:
+                      si al salir todo queda en orden, la liberamos, y si hay daños cobramos solo lo
+                      necesario para repararlos y te contamos. Sin el depósito no podemos confirmar
+                      la reserva.
+                    </p>
+                    <ul className="mt-3 max-w-[65ch] list-disc space-y-1 pl-5 text-small">
+                      <li>
+                        Se hace con tarjeta de crédito o débito (también si pagas con PSE) o con
+                        PayPal, y necesita cupo o saldo disponible por ese valor.
+                      </li>
+                      <li>
+                        Tu banco libera la retención solo a los pocos días (unos 7 con tarjeta y
+                        hasta 29 con PayPal), aunque tu estadía sea después.
+                      </li>
+                      <li>
+                        Con tarjeta débito, tu banco puede descontar el monto de tu cuenta mientras
+                        dura la retención y devolverlo al liberarla.
+                      </li>
+                    </ul>
+                  </div>
+                )}
+
                 {holdVencido ? (
                   <div className="mt-6 rounded-card border border-terracota-oscuro bg-blanco p-5 md:p-6">
                     <p className="font-medium text-terracota-oscuro">
@@ -1486,26 +1686,218 @@ export function FlujoReserva({
                   </p>
                 )}
 
-                <MedioPaypal totalCop={cot.total} trm={trmValor} />
+                {deposito && (
+                  <p
+                    role="status"
+                    className="mt-4 flex items-start gap-3 rounded-card bg-verde-tinte p-4"
+                  >
+                    <CircleCheck
+                      size={24}
+                      strokeWidth={1.5}
+                      className="shrink-0 text-verde"
+                      aria-hidden
+                    />
+                    <span>
+                      Depósito autorizado: retuvimos {montoDeposito}{" "}
+                      {deposito === "openpay" ? "en tu tarjeta" : "en PayPal"}, sin cobrarlo. Ahora
+                      completa el pago con {deposito === "openpay" ? "Openpay" : "PayPal"}.
+                    </span>
+                  </p>
+                )}
+
+                {!holdVencido && (
+                  <MedioPago
+                    fijo={deposito}
+                    openpay={
+                      openpay && (
+                        <div className="rounded-card border border-verde bg-blanco p-4">
+                          <h3 className="font-serif text-h3 text-verde">
+                            Pagas {formatoPrecio(cot.total, "COP", null)} en pesos colombianos
+                          </h3>
+                          <fieldset className="mt-4">
+                            <legend className="text-small font-medium text-verde">
+                              ¿Con qué pagas la reserva?
+                            </legend>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(
+                                [
+                                  ["tarjeta", "Tarjeta de crédito o débito"],
+                                  ["pse", "PSE (desde tu cuenta bancaria)"],
+                                ] as const
+                              ).map(([valor, texto]) => (
+                                <label
+                                  key={valor}
+                                  className={`flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-small transition-colors duration-200 ${
+                                    modoOpenpay === valor
+                                      ? "border-verde text-verde"
+                                      : "border-niebla hover:border-verde"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="modo-openpay"
+                                    value={valor}
+                                    checked={modoOpenpay === valor}
+                                    onChange={() => {
+                                      setAviso(null);
+                                      setModoOpenpay(valor);
+                                    }}
+                                    className="accent-verde"
+                                  />
+                                  {texto}
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+
+                          {modoOpenpay === "tarjeta" ? (
+                            <div className="mt-4">
+                              {faltaDeposito && (
+                                <p className="mb-4 max-w-[65ch] text-small">
+                                  Con un solo clic retenemos el depósito de {montoDeposito} y
+                                  cobramos {formatoPrecio(cot.total, "COP", null)} a la misma
+                                  tarjeta.
+                                </p>
+                              )}
+                              <FormularioTarjeta
+                                openpay={openpay}
+                                textoBoton={
+                                  faltaDeposito
+                                    ? `Autorizar depósito y pagar ${formatoPrecio(cot.total, "COP", null)}`
+                                    : `Pagar ${formatoPrecio(cot.total, "COP", null)}`
+                                }
+                                enviar={async (token, sesion) => {
+                                  if (faltaDeposito) {
+                                    const d = await depositoTarjetaReserva(
+                                      reserva.codigo,
+                                      await token(),
+                                      sesion,
+                                    );
+                                    if (!d.ok && d.error !== "ya_existe") return d;
+                                    setDeposito("openpay");
+                                  }
+                                  return pagarTarjetaReserva(reserva.codigo, await token(), sesion);
+                                }}
+                                alExito={() =>
+                                  router.push(`/reservas/confirmacion/${reserva.codigo}`)
+                                }
+                                alError={setAviso}
+                              />
+                            </div>
+                          ) : (
+                            <div className="mt-4 space-y-4">
+                              {faltaDeposito && (
+                                <div>
+                                  <p className="max-w-[65ch] text-small">
+                                    <span className="font-medium text-verde">Paso 1 de 2.</span> PSE
+                                    no permite retener dinero, así que el depósito va con una
+                                    tarjeta de crédito o débito.
+                                  </p>
+                                  <div className="mt-3">
+                                    <FormularioTarjeta
+                                      openpay={openpay}
+                                      textoBoton={`Autorizar depósito de ${montoDeposito}`}
+                                      textoProcesando="Autorizando tu depósito…"
+                                      enviar={async (token, sesion) => {
+                                        const d = await depositoTarjetaReserva(
+                                          reserva.codigo,
+                                          await token(),
+                                          sesion,
+                                        );
+                                        return d.ok || d.error === "ya_existe" ? { ok: true } : d;
+                                      }}
+                                      alExito={() => setDeposito("openpay")}
+                                      alError={setAviso}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                              {!faltaDeposito && (
+                                <div>
+                                  <p className="max-w-[65ch] text-small">
+                                    {conDeposito && (
+                                      <span className="font-medium text-verde">Paso 2 de 2. </span>
+                                    )}
+                                    Te llevamos a tu banco con PSE para pagar{" "}
+                                    {formatoPrecio(cot.total, "COP", null)}.
+                                  </p>
+                                  <div className="mt-3">
+                                    <BotonPse
+                                      iniciar={() => iniciarPseReserva(reserva.codigo)}
+                                      alError={setAviso}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    paypal={
+                      paypal && (
+                        <>
+                          <MedioPaypal totalCop={cot.total} trm={trmValor} />
+                          {faltaDeposito ? (
+                            <div className="mt-4">
+                              <p className="max-w-[65ch] text-small">
+                                <span className="font-medium text-verde">Paso 1 de 2.</span>{" "}
+                                Autoriza en PayPal la retención del depósito de {montoDeposito}
+                                {trmValor
+                                  ? ` (unos ${formatoPrecio(config.montoDeposito, "USD", trmValor)})`
+                                  : ""}
+                                . Después pagas la reserva.
+                              </p>
+                              <div className="mt-3">
+                                <BotonPaypal
+                                  key="deposito"
+                                  paypal={paypal}
+                                  iniciar={() => iniciarDepositoReserva(reserva.codigo)}
+                                  aprobar={autorizarDepositoReserva}
+                                  alAprobar={() => setDeposito("paypal")}
+                                  alError={setAviso}
+                                  textoProcesando="Autorizando tu depósito…"
+                                  textoCancelado="Cancelaste la autorización en PayPal. Seguimos apartando tus fechas mientras corre el tiempo."
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-4">
+                              {conDeposito && (
+                                <p className="max-w-[65ch] text-small">
+                                  <span className="font-medium text-verde">Paso 2 de 2.</span> Paga
+                                  la reserva en PayPal.
+                                </p>
+                              )}
+                              <div className="mt-3">
+                                <BotonPaypal
+                                  key="pago"
+                                  paypal={paypal}
+                                  iniciar={() => iniciarPagoReserva(reserva.codigo)}
+                                  aprobar={capturarPagoReserva}
+                                  alAprobar={() =>
+                                    router.push(`/reservas/confirmacion/${reserva.codigo}`)
+                                  }
+                                  alError={setAviso}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    }
+                  />
+                )}
                 {aviso && <Aviso>{aviso}</Aviso>}
 
-                <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-8">
                   <button type="button" onClick={() => irA(3)} className={claseBoton("secundario")}>
                     <ArrowLeft size={20} strokeWidth={1.5} aria-hidden /> Volver a tus datos
                   </button>
-                  {paypal && !holdVencido && (
-                    <BotonPaypal
-                      paypal={paypal}
-                      iniciar={() => iniciarPagoReserva(reserva.codigo)}
-                      capturar={capturarPagoReserva}
-                      alAprobar={() => router.push(`/reservas/confirmacion/${reserva.codigo}`)}
-                      alError={setAviso}
-                    />
-                  )}
                 </div>
                 <p className="mt-4 max-w-[65ch] text-small">
-                  {paypal
-                    ? "¿Prefieres pagar en pesos colombianos? Escríbenos por "
+                  {paypal || openpay
+                    ? "¿Tienes dudas con el pago? Escríbenos por "
                     : "El pago en línea no está disponible en este momento. Escríbenos por "}
                   <a
                     href={enlaceWhatsApp(
@@ -1531,6 +1923,7 @@ export function FlujoReserva({
               salida={salida}
               huespedes={huespedes}
               adicionales={adicionales}
+              mascotas={mascotas}
               cot={cot}
               trm={trm}
               conDesglose={paso === 1}

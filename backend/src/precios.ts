@@ -17,6 +17,7 @@ export type ConfigTarifas = {
   maxAdicionales: number;
   precioAdicionalAdulto: number;
   precioAdicionalNino: number;
+  precioMascota: number;
   minimoNochesPuente: number;
   nocheFestivoAlta: boolean;
 };
@@ -93,6 +94,8 @@ export type Estadia = {
   huespedes: number;
   /** Solo con el grupo base completo (huespedes = maxHuespedes). */
   adicionales?: Adicionales;
+  /** No cuentan como huéspedes; se cobran por mascota y por noche. */
+  mascotas?: number;
 };
 
 export type Cotizacion = {
@@ -109,7 +112,11 @@ export type Cotizacion = {
   precioAdicionalNino: number;
   /** Adultos y niños adicionales por todas las noches. */
   extraAdicionales: number;
-  /** Alojamiento: subtotal + extraPersonas + extraAdicionales. */
+  mascotas: number;
+  /** Por mascota y por noche. */
+  precioMascota: number;
+  extraMascotas: number;
+  /** Alojamiento: subtotal + extraPersonas + extraAdicionales + extraMascotas. */
   totalSinDescuento: number;
   /** Solo sobre el alojamiento. */
   descuento: Descuento | null;
@@ -119,8 +126,10 @@ export type Cotizacion = {
   moneda: "COP";
 };
 
-/** Cabalgata para todo el grupo. */
+/** Cabalgata para todo el grupo: un caballo por persona (sin los menores de 4 años). */
 export type Cabalgata = {
+  servicioId: number;
+  nombre: string;
   fecha: string;
   /** "HH:MM", o "" si el servicio no tiene turnos. */
   turno: string;
@@ -129,9 +138,14 @@ export type Cabalgata = {
   subtotal: number;
 };
 
-export type EleccionCabalgata = { fecha: string; turno: string };
+/** `servicio` es el slug de la cabalgata; `turno` es "" si no tiene turnos. */
+export type EleccionCabalgata = { servicio: string; fecha: string; turno: string };
 
+/** Una cabalgata y sus cupos para la estadía. */
 export type DatosCabalgata = {
+  servicioId: number;
+  nombre: string;
+  /** Por caballo; va uno por persona. */
   precioPersona: number;
   /** [""] si el servicio no tiene turnos. */
   turnos: string[];
@@ -165,6 +179,7 @@ export type ErrorCotizacion = {
     | "fechas_invalidas"
     | "huespedes_invalidos"
     | "adicionales_invalidos"
+    | "mascotas_invalidas"
     | "minimo_noches"
     | "no_disponible"
     | "codigo_invalido"
@@ -269,7 +284,7 @@ export function cotizar(
   datos: DatosTarifas,
   hoy: string,
 ): Cotizacion | ErrorCotizacion {
-  const { llegada, salida, huespedes, adicionales = SIN_ADICIONALES } = estadia;
+  const { llegada, salida, huespedes, adicionales = SIN_ADICIONALES, mascotas = 0 } = estadia;
   const { config } = datos;
 
   if (!esFechaValida(llegada) || !esFechaValida(salida) || llegada < hoy) {
@@ -290,6 +305,8 @@ export function cotizar(
   ) {
     return { ok: false, error: "adicionales_invalidos" };
   }
+  if (!Number.isInteger(mascotas) || mascotas < 0)
+    return { ok: false, error: "mascotas_invalidas" };
 
   const noches: Noche[] = [];
   let minimo = 1;
@@ -316,8 +333,9 @@ export function cotizar(
     cantidad *
     (adicionales.adultos * config.precioAdicionalAdulto +
       adicionales.ninos * config.precioAdicionalNino);
+  const extraMascotas = cantidad * mascotas * config.precioMascota;
 
-  const total = subtotal + extraPersonas + extraAdicionales;
+  const total = subtotal + extraPersonas + extraAdicionales + extraMascotas;
   return {
     ok: true,
     noches,
@@ -329,6 +347,9 @@ export function cotizar(
     precioAdicionalAdulto: config.precioAdicionalAdulto,
     precioAdicionalNino: config.precioAdicionalNino,
     extraAdicionales,
+    mascotas,
+    precioMascota: config.precioMascota,
+    extraMascotas,
     totalSinDescuento: total,
     descuento: null,
     cabalgata: null,
@@ -466,6 +487,8 @@ export function agregarCabalgata(
   return conTotal({
     ...cot,
     cabalgata: {
+      servicioId: datos.servicioId,
+      nombre: datos.nombre,
       fecha,
       turno,
       personas,
@@ -577,4 +600,58 @@ export function calcularFestivos(anio: number): { fecha: string; nombre: string 
     { fecha: sumarDias(p, 71), nombre: "Sagrado Corazón" },
   ];
   return festivos.sort((x, y) => x.fecha.localeCompare(y.fecha));
+}
+
+// ---------------------------------------------------------------------------
+// Temporada alta y fechas especiales (se cargan en `temporadas` y `ajustes_fecha` con la semilla)
+// ---------------------------------------------------------------------------
+
+/** El enésimo `dia` (0 = domingo … 6 = sábado) de un mes. */
+function enesimoDia(anio: number, mes: number, dia: number, n: number) {
+  const primero = `${anio}-${String(mes).padStart(2, "0")}-01`;
+  return sumarDias(primero, ((dia - diaSemana(primero) + 7) % 7) + 7 * (n - 1));
+}
+
+/** Rangos de noches (ambas inclusive). Fin de año cruza al año siguiente. */
+export function calcularTemporadasAltas(anio: number): Temporada[] {
+  const p = pascua(anio);
+  const base = { precioNoche: null, precioPersonaExtra: null, minimoNoches: 2 };
+  return [
+    // Del viernes anterior a Domingo de Ramos a la noche del Sábado Santo (salida el domingo de Pascua).
+    {
+      nombre: `Semana Santa ${anio}`,
+      fechaInicio: sumarDias(p, -9),
+      fechaFin: sumarDias(p, -1),
+      ...base,
+    },
+    {
+      nombre: `Mitad de año ${anio}`,
+      fechaInicio: `${anio}-06-15`,
+      fechaFin: `${anio}-07-15`,
+      ...base,
+    },
+    // Incluye la Feria de Manizales (primera quincena de enero).
+    {
+      nombre: `Fin de año ${anio}`,
+      fechaInicio: `${anio}-12-15`,
+      fechaFin: `${anio + 1}-01-15`,
+      ...base,
+    },
+  ];
+}
+
+/** Noches que se cobran a precioFechaEspecial. */
+export function calcularFechasEspeciales(anio: number): { fecha: string; nombre: string }[] {
+  const f = (mes: number, dia: number) =>
+    `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  const especiales = [
+    { fecha: f(2, 14), nombre: "San Valentín" },
+    { fecha: enesimoDia(anio, 5, 0, 2), nombre: "Día de la Madre" },
+    { fecha: enesimoDia(anio, 6, 0, 3), nombre: "Día del Padre" },
+    { fecha: enesimoDia(anio, 9, 6, 3), nombre: "Amor y Amistad" },
+    { fecha: f(12, 7), nombre: "Noche de Velitas" },
+    { fecha: f(12, 24), nombre: "Nochebuena" },
+    { fecha: f(12, 31), nombre: "Fin de año" },
+  ];
+  return especiales.sort((x, y) => x.fecha.localeCompare(y.fecha));
 }

@@ -2,7 +2,7 @@
 // descuento y cupos de la cabalgata. No hay panel: solo las usa scripts/admin.ts desde la terminal.
 // Las reservas del admin van en la tabla `reservas`, así pasan por reservas_sin_cruce y no pueden
 // cruzarse con una reserva web.
-import { and, asc, eq, gt, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, like, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { correosAdmin } from "./correos";
 import { codigosDescuento, cuposServicio, getDb, reservas, servicios } from "./db";
@@ -15,7 +15,7 @@ import {
   esViolacionSinCruce,
   nuevoCodigo,
   reservaActiva,
-  SLUG_CABALGATA,
+  PREFIJO_CABALGATA,
   usosCodigo,
 } from "./reservas";
 
@@ -262,43 +262,55 @@ export async function listarCodigos() {
 }
 
 // ---------------------------------------------------------------------------
-// Cabalgata
+// Cabalgatas (servicios con slug `cabalgata-…`)
 // ---------------------------------------------------------------------------
 
-async function servicioCabalgata() {
-  const [s] = await getDb()
+/** Las cabalgatas (todas, o solo la del slug), con capacidad y precio actuales. */
+export async function listarServiciosCabalgata(slug?: string) {
+  return getDb()
     .select({
       id: servicios.id,
+      slug: servicios.slug,
+      nombre: servicios.nombre,
+      activo: servicios.activo,
       turnos: servicios.turnos,
       capacidadTurno: servicios.capacidadTurno,
       precio: servicios.precio,
     })
     .from(servicios)
-    .where(eq(servicios.slug, SLUG_CABALGATA))
-    .limit(1);
-  return s ?? null;
+    .where(
+      and(
+        like(servicios.slug, `${PREFIJO_CABALGATA}%`),
+        slug ? eq(servicios.slug, slug) : undefined,
+      ),
+    )
+    .orderBy(asc(servicios.orden), asc(servicios.id));
 }
 
-/** Cabalgatas de reservas activas desde `desde` (hoy por defecto), para coordinar con el aliado. */
+/** Cabalgatas de reservas activas desde `desde` (hoy por defecto), para coordinar los caballos. */
 export async function listarCabalgatas(desde = hoyEnBogota()) {
   return getDb()
     .select({
       fecha: reservas.cabalgataFecha,
       turno: reservas.cabalgataTurno,
-      personas: reservas.cabalgataPersonas,
+      cabalgata: servicios.nombre,
+      caballos: reservas.cabalgataPersonas,
       codigo: reservas.codigo,
       estado: reservas.estado,
       nombre: reservas.nombre,
       telefono: reservas.telefono,
     })
     .from(reservas)
-    .where(
-      and(reservaActiva, isNotNull(reservas.cabalgataFecha), gte(reservas.cabalgataFecha, desde)),
-    )
+    .innerJoin(servicios, eq(servicios.id, reservas.cabalgataServicioId))
+    .where(and(reservaActiva, gte(reservas.cabalgataFecha, desde)))
     .orderBy(asc(reservas.cabalgataFecha), asc(reservas.cabalgataTurno));
 }
 
 const esquemaCupoCabalgata = z.object({
+  servicio: z
+    .string()
+    .regex(/^cabalgata-[a-z0-9-]{1,60}$/, { error: "Usa el slug, ej. cabalgata-30-minutos" })
+    .optional(),
   fecha: fecha.optional(),
   turno: z
     .string()
@@ -313,49 +325,69 @@ const esquemaCupoCabalgata = z.object({
 });
 
 export type ResultadoCupoCabalgata =
-  | { ok: true; turnos: string[]; afectadas: Awaited<ReturnType<typeof listarCabalgatas>> }
+  | {
+      ok: true;
+      cabalgatas: string[];
+      afectadas: Awaited<ReturnType<typeof listarCabalgatas>>;
+    }
   | { ok: false; error: "datos_invalidos"; errores: Errores }
   | { ok: false; error: "sin_cabalgata" | "turno_invalido" };
 
+/** Turnos a los que aplica un cambio: el indicado, o todos los de la cabalgata ("" sin turnos). */
+function turnosDe(s: { turnos: string[] }, turno?: string) {
+  const todos = s.turnos.length > 0 ? s.turnos : [""];
+  if (!turno) return todos;
+  return todos.includes(turno) ? [turno] : null;
+}
+
 /**
- * Cambia la capacidad de la cabalgata. Sin fecha, la de todos los días (por turno). Con fecha,
- * solo la de ese día (y turno, si se indica); capacidad 0 = cerrado. Las reservas que ya la
- * tienen no se tocan: se devuelven en `afectadas` para avisarles.
+ * Cambia los caballos disponibles. Sin `servicio`, en todas las cabalgatas. Sin fecha, la
+ * capacidad de todos los días; con fecha, solo la de ese día (y turno, si se indica); 0 = cerrado.
+ * Las reservas que ya la tienen no se tocan: se devuelven en `afectadas` para avisarles.
  */
 export async function fijarCapacidadCabalgata(entrada: unknown): Promise<ResultadoCupoCabalgata> {
   const e = esquemaCupoCabalgata.safeParse(entrada);
   if (!e.success) return { ok: false, error: "datos_invalidos", errores: errores(e.error) };
-  const { fecha: dia, turno, capacidad } = e.data;
+  const { servicio, fecha: dia, turno, capacidad } = e.data;
   if (capacidad === undefined)
     return { ok: false, error: "datos_invalidos", errores: { capacidad: ["Indica la capacidad"] } };
-  const s = await servicioCabalgata();
-  if (!s) return { ok: false, error: "sin_cabalgata" };
-  const todos = s.turnos.length > 0 ? s.turnos : [""];
-  if (turno && !todos.includes(turno)) return { ok: false, error: "turno_invalido" };
+  const cabalgatas = await listarServiciosCabalgata(servicio);
+  if (cabalgatas.length === 0) return { ok: false, error: "sin_cabalgata" };
+  if (cabalgatas.some((s) => !turnosDe(s, turno))) return { ok: false, error: "turno_invalido" };
 
+  const db = getDb();
   if (!dia) {
-    await getDb()
+    await db
       .update(servicios)
       .set({ capacidadTurno: capacidad })
-      .where(eq(servicios.id, s.id));
-    return { ok: true, turnos: todos, afectadas: [] };
+      .where(
+        inArray(
+          servicios.id,
+          cabalgatas.map((s) => s.id),
+        ),
+      );
+    return { ok: true, cabalgatas: cabalgatas.map((s) => s.nombre), afectadas: [] };
   }
 
-  const turnos = turno ? [turno] : todos;
-  await getDb()
+  await db
     .insert(cuposServicio)
-    .values(turnos.map((t) => ({ servicioId: s.id, fecha: dia, turno: t, capacidad })))
+    .values(
+      cabalgatas.flatMap((s) =>
+        turnosDe(s, turno)!.map((t) => ({ servicioId: s.id, fecha: dia, turno: t, capacidad })),
+      ),
+    )
     .onConflictDoUpdate({
       target: [cuposServicio.servicioId, cuposServicio.fecha, cuposServicio.turno],
       set: { capacidad },
     });
+  const nombres = cabalgatas.map((s) => s.nombre);
   const afectadas = (await listarCabalgatas(dia)).filter(
-    (c) => c.fecha === dia && turnos.includes(c.turno ?? ""),
+    (c) => c.fecha === dia && nombres.includes(c.cabalgata) && (!turno || c.turno === turno),
   );
-  return { ok: true, turnos, afectadas };
+  return { ok: true, cabalgatas: nombres, afectadas };
 }
 
-/** Quita las excepciones de un día (o de un turno): vuelve a la capacidad de todos los días. */
+/** Quita las excepciones de un día (o turno): vuelve a la capacidad de todos los días. */
 export async function abrirCabalgata(entrada: unknown): Promise<ResultadoCupoCabalgata> {
   const e = esquemaCupoCabalgata.safeParse(entrada);
   if (!e.success || !e.data.fecha)
@@ -364,39 +396,39 @@ export async function abrirCabalgata(entrada: unknown): Promise<ResultadoCupoCab
       error: "datos_invalidos",
       errores: e.success ? { fecha: ["Indica la fecha"] } : errores(e.error),
     };
-  const s = await servicioCabalgata();
-  if (!s) return { ok: false, error: "sin_cabalgata" };
-  const todos = s.turnos.length > 0 ? s.turnos : [""];
-  const { fecha: dia, turno } = e.data;
-  if (turno && !todos.includes(turno)) return { ok: false, error: "turno_invalido" };
-  const turnos = turno ? [turno] : todos;
+  const { servicio, fecha: dia, turno } = e.data;
+  const cabalgatas = await listarServiciosCabalgata(servicio);
+  if (cabalgatas.length === 0) return { ok: false, error: "sin_cabalgata" };
+  if (cabalgatas.some((s) => !turnosDe(s, turno))) return { ok: false, error: "turno_invalido" };
   await getDb()
     .delete(cuposServicio)
     .where(
       and(
-        eq(cuposServicio.servicioId, s.id),
+        inArray(
+          cuposServicio.servicioId,
+          cabalgatas.map((s) => s.id),
+        ),
         eq(cuposServicio.fecha, dia),
-        inArray(cuposServicio.turno, turnos),
+        turno ? eq(cuposServicio.turno, turno) : undefined,
       ),
     );
-  return { ok: true, turnos, afectadas: [] };
+  return { ok: true, cabalgatas: cabalgatas.map((s) => s.nombre), afectadas: [] };
 }
 
-/** Cambia el precio por persona. Las reservas ya hechas conservan el suyo. */
-export async function fijarPrecioCabalgata(valor: unknown) {
+/** Cambia el precio por caballo de una cabalgata. Las reservas ya hechas conservan el suyo. */
+export async function fijarPrecioCabalgata(servicio: unknown, valor: unknown) {
+  const slug = z
+    .string()
+    .regex(/^cabalgata-[a-z0-9-]{1,60}$/)
+    .safeParse(servicio);
   const v = z.coerce.number().int().min(0).max(10_000_000).safeParse(valor);
-  if (!v.success) return { ok: false, error: "datos_invalidos" } as const;
+  if (!slug.success || !v.success) return { ok: false, error: "datos_invalidos" } as const;
   const filas = await getDb()
     .update(servicios)
     .set({ precio: v.data })
-    .where(eq(servicios.slug, SLUG_CABALGATA))
+    .where(eq(servicios.slug, slug.data))
     .returning({ id: servicios.id });
   return filas.length > 0
     ? ({ ok: true } as const)
     : ({ ok: false, error: "sin_cabalgata" } as const);
-}
-
-/** Capacidad y precio actuales, para mostrarlos en la terminal. */
-export async function resumenCabalgata() {
-  return servicioCabalgata();
 }

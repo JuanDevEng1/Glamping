@@ -12,7 +12,7 @@ import {
   listarCabalgatas,
   listarCodigos,
   listarReservas,
-  resumenCabalgata,
+  listarServiciosCabalgata,
   type ResultadoCupoCabalgata,
 } from "../src/admin";
 import { getDb } from "../src/db";
@@ -38,13 +38,13 @@ Códigos de descuento (solo reservas del glamping):
   codigo desactivar PROMO15
   codigos                         Lista los códigos con sus usos
 
-Cabalgata (va todo el grupo; se agrega al reservar):
-  cabalgata [--desde AAAA-MM-DD]  Próximas cabalgatas reservadas, con capacidad y precio
-  cabalgata cerrar --fecha AAAA-MM-DD [--turno 09:00]
-  cabalgata abrir --fecha AAAA-MM-DD [--turno 09:00]     Vuelve a la capacidad de todos los días
-  cabalgata capacidad --capacidad 6 [--fecha AAAA-MM-DD --turno 09:00]
-           (sin --fecha cambia la capacidad de todos los días, por turno)
-  cabalgata precio --valor 85000  Precio por persona
+Cabalgatas (va todo el grupo, un caballo por persona; se agregan al reservar):
+  cabalgata [--desde AAAA-MM-DD]  Cabalgatas, caballos y precio, y las próximas reservadas
+  cabalgata cerrar --fecha AAAA-MM-DD [--servicio cabalgata-… --turno 09:00]
+  cabalgata abrir --fecha AAAA-MM-DD [--servicio cabalgata-…]   Vuelve a la capacidad normal
+  cabalgata capacidad --capacidad 6 [--servicio cabalgata-… --fecha AAAA-MM-DD]
+           (sin --fecha cambia los caballos de todos los días; sin --servicio, de todas)
+  cabalgata precio --servicio cabalgata-30-minutos --valor 60000   Precio por caballo
 
 La llegada es la primera noche y la salida es el día en que se van (no se cuenta como noche).`;
 
@@ -72,6 +72,7 @@ const { values: o, positionals } = parseArgs({
     turno: { type: "string" },
     capacidad: { type: "string" },
     valor: { type: "string" },
+    servicio: { type: "string" },
   },
 });
 
@@ -189,24 +190,40 @@ async function ejecutar() {
     }
     case "cabalgata": {
       if (!sub) {
-        const s = await resumenCabalgata();
-        if (!s) fallar("No hay un servicio de cabalgata en la BD.");
-        console.log(
-          `Cabalgata: ${s.capacidadTurno} personas por turno (${s.turnos.join(", ") || "sin turnos"}), $${s.precio.toLocaleString("es-CO")} por persona.`,
+        const cabalgatas = await listarServiciosCabalgata();
+        if (cabalgatas.length === 0) fallar("No hay cabalgatas en la BD.");
+        console.table(
+          cabalgatas.map((s) => ({
+            servicio: s.slug,
+            nombre: s.nombre,
+            activa: s.activo,
+            caballos: s.capacidadTurno,
+            turnos: s.turnos.join(", ") || "sin turnos",
+            precio: `$${s.precio.toLocaleString("es-CO")} por caballo`,
+          })),
         );
         const filas = await listarCabalgatas(o.desde);
         if (filas.length === 0) return console.log("No hay cabalgatas reservadas desde esa fecha.");
         return console.table(filas);
       }
       if (sub === "precio") {
-        const r = await fijarPrecioCabalgata(o.valor);
+        const r = await fijarPrecioCabalgata(o.servicio, o.valor);
         if (r.ok)
-          return console.log(`Precio por persona: $${Number(o.valor).toLocaleString("es-CO")}.`);
+          return console.log(
+            `${o.servicio}: $${Number(o.valor).toLocaleString("es-CO")} por caballo.`,
+          );
         fallar(
-          r.error === "sin_cabalgata" ? "No hay un servicio de cabalgata." : "Revisa --valor.",
+          r.error === "sin_cabalgata"
+            ? "No existe esa cabalgata (mira los slugs con: npm run admin -- cabalgata)."
+            : "Indica --servicio cabalgata-… y --valor.",
         );
       }
-      const entrada = { fecha: o.fecha, turno: o.turno, capacidad: o.capacidad };
+      const entrada = {
+        servicio: o.servicio,
+        fecha: o.fecha,
+        turno: o.turno,
+        capacidad: o.capacidad,
+      };
       let r: ResultadoCupoCabalgata;
       if (sub === "cerrar") {
         if (!o.fecha) fallar("Indica --fecha AAAA-MM-DD.");
@@ -222,19 +239,18 @@ async function ejecutar() {
         }
         fallar(
           r.error === "sin_cabalgata"
-            ? "No hay un servicio de cabalgata en la BD."
+            ? "No existe esa cabalgata (mira los slugs con: npm run admin -- cabalgata)."
             : "Ese turno no existe en la cabalgata.",
         );
       }
-      const donde = o.fecha
-        ? `el ${o.fecha} (${r.turnos.join(", ") || "todo el día"})`
-        : "todos los días";
+      const cuales = r.cabalgatas.join(" y ");
+      const donde = o.fecha ? `el ${o.fecha}${o.turno ? ` (${o.turno})` : ""}` : "todos los días";
       console.log(
         sub === "cerrar"
-          ? `Cabalgata cerrada ${donde}.`
+          ? `${cuales}: cerrada ${donde}.`
           : sub === "abrir"
-            ? `Cabalgata ${donde}: vuelve a la capacidad de todos los días.`
-            : `Capacidad de la cabalgata ${donde}: ${o.capacidad} personas por turno.`,
+            ? `${cuales}: ${donde} vuelve a la capacidad de todos los días.`
+            : `${cuales}: ${o.capacidad} caballos ${donde}.`,
       );
       if (r.afectadas.length > 0) {
         console.log("Ojo: estas reservas ya tienen cabalgata ese día y no se modificaron:");

@@ -8,6 +8,7 @@ import { detalleAdicionales, diasEntre, textoPersonas } from "@lauburu/backend/p
 import { Container } from "@/components/Container";
 import {
   CopiarCodigo,
+  DepositoGarantia,
   RefrescoAutomatico,
   SubirDocumento,
 } from "@/components/reserva/Confirmacion";
@@ -112,11 +113,13 @@ export default async function ConfirmacionReserva({
               <SubirDocumento codigo={reserva.codigo} recibido={reserva.documentoRecibido} />
             )}
 
+            {confirmada && reserva.deposito && <DepositoGarantia deposito={reserva.deposito} />}
+
             {/* Resumen */}
             <Tarjeta>
               <h2 className="font-serif text-h3 text-verde">Resumen de la reserva</h2>
               <div className="mt-4 grid gap-6 sm:grid-cols-3">
-                <FotoPendiente descripcion="Vista del glamping" className="aspect-[3/2]" />
+                <FotoPendiente descripcion="Vista del glamping" className="aspect-3/2" />
                 <dl className="grid gap-4 text-small sm:col-span-2 sm:grid-cols-2">
                   <div>
                     <dt className="font-medium text-verde">Fechas</dt>
@@ -143,17 +146,22 @@ export default async function ConfirmacionReserva({
                         Adicionales: {detalleAdicionales(reserva.adicionales).join(", ")}
                       </dd>
                     )}
+                    {reserva.mascotas > 0 && (
+                      <dd className="text-xs">
+                        {reserva.mascotas} {reserva.mascotas === 1 ? "mascota" : "mascotas"}
+                      </dd>
+                    )}
                   </div>
                   {reserva.cabalgata && (
                     <div>
-                      <dt className="font-medium text-verde">Cabalgata</dt>
+                      <dt className="font-medium text-verde">{reserva.cabalgata.nombre}</dt>
                       <dd>
                         {formatoFechaCorta(reserva.cabalgata.fecha)}
                         {reserva.cabalgata.turno && `, ${formatoHora(reserva.cabalgata.turno)}`}
                       </dd>
                       <dd>
                         {reserva.cabalgata.personas}{" "}
-                        {reserva.cabalgata.personas === 1 ? "persona" : "personas"} ·{" "}
+                        {reserva.cabalgata.personas === 1 ? "caballo" : "caballos"} ·{" "}
                         {formatoPrecio(reserva.cabalgata.totalCop, "COP", null)}
                       </dd>
                     </div>

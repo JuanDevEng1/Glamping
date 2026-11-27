@@ -1,6 +1,6 @@
 {
-  "id": "df126c2d-d120-43f6-8410-a2d0529abd8b",
-  "prevId": "79a9cb2a-be7b-40f7-aaca-f70277e32e2f",
+  "id": "fe0727f1-55cd-4cac-9109-e277eeca2a5f",
+  "prevId": "ddb65061-4fe6-4ce3-b05a-acfebaf0b968",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -86,108 +86,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.codigos_descuento": {
-      "name": "codigos_descuento",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "codigo": {
-          "name": "codigo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "porcentaje": {
-          "name": "porcentaje",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "activo": {
-          "name": "activo",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "valido_desde": {
-          "name": "valido_desde",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "valido_hasta": {
-          "name": "valido_hasta",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "estadia_desde": {
-          "name": "estadia_desde",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "estadia_hasta": {
-          "name": "estadia_hasta",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "usos_maximos": {
-          "name": "usos_maximos",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "descripcion": {
-          "name": "descripcion",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "creado_en": {
-          "name": "creado_en",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "codigos_descuento_codigo_unique": {
-          "name": "codigos_descuento_codigo_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "codigo"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "codigos_descuento_porcentaje": {
-          "name": "codigos_descuento_porcentaje",
-          "value": "\"codigos_descuento\".\"porcentaje\" between 1 and 90"
-        },
-        "codigos_descuento_usos": {
-          "name": "codigos_descuento_usos",
-          "value": "\"codigos_descuento\".\"usos_maximos\" is null or \"codigos_descuento\".\"usos_maximos\" >= 1"
-        },
-        "codigos_descuento_mayusculas": {
-          "name": "codigos_descuento_mayusculas",
-          "value": "\"codigos_descuento\".\"codigo\" = upper(\"codigos_descuento\".\"codigo\")"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.configuracion": {
       "name": "configuracion",
       "schema": "",
@@ -251,6 +149,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 60000
+        },
+        "precio_mascota": {
+          "name": "precio_mascota",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 50000
         },
         "max_huespedes": {
           "name": "max_huespedes",
@@ -342,6 +247,10 @@
         "configuracion_adicionales": {
           "name": "configuracion_adicionales",
           "value": "\"configuracion\".\"max_adicionales\" >= 0 and \"configuracion\".\"precio_adicional_adulto\" >= 0 and \"configuracion\".\"precio_adicional_nino\" >= 0"
+        },
+        "configuracion_mascotas": {
+          "name": "configuracion_mascotas",
+          "value": "\"configuracion\".\"precio_mascota\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -601,6 +510,38 @@
           "value": "\"items_pedido\".\"cantidad\" >= 1"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.limites_peticiones": {
+      "name": "limites_peticiones",
+      "schema": "",
+      "columns": {
+        "clave": {
+          "name": "clave",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "inicio": {
+          "name": "inicio",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "conteo": {
+          "name": "conteo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.pagos": {
@@ -922,6 +863,13 @@
           "notNull": true,
           "default": 0
         },
+        "mascotas": {
+          "name": "mascotas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "estado": {
           "name": "estado",
           "type": "text",
@@ -929,63 +877,11 @@
           "notNull": true,
           "default": "'pendiente'"
         },
-        "origen": {
-          "name": "origen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'web'"
-        },
-        "nota_admin": {
-          "name": "nota_admin",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "total_cop": {
           "name": "total_cop",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
-        },
-        "codigo_descuento_id": {
-          "name": "codigo_descuento_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "descuento_cop": {
-          "name": "descuento_cop",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "cabalgata_fecha": {
-          "name": "cabalgata_fecha",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cabalgata_turno": {
-          "name": "cabalgata_turno",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cabalgata_personas": {
-          "name": "cabalgata_personas",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "cabalgata_cop": {
-          "name": "cabalgata_cop",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "desglose": {
           "name": "desglose",
@@ -1041,6 +937,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "alergias": {
+          "name": "alergias",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contacto_emergencia": {
+          "name": "contacto_emergencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telefono_emergencia": {
+          "name": "telefono_emergencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "pasarela": {
           "name": "pasarela",
           "type": "text",
@@ -1081,21 +995,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "reservas_codigo_descuento_id_codigos_descuento_id_fk": {
-          "name": "reservas_codigo_descuento_id_codigos_descuento_id_fk",
-          "tableFrom": "reservas",
-          "tableTo": "codigos_descuento",
-          "columnsFrom": [
-            "codigo_descuento_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "reservas_codigo_unique": {
@@ -1120,21 +1020,13 @@
           "name": "reservas_adicionales",
           "value": "\"reservas\".\"adultos_adicionales\" >= 0 and \"reservas\".\"ninos_adicionales\" >= 0 and \"reservas\".\"menores_adicionales\" >= 0"
         },
+        "reservas_mascotas": {
+          "name": "reservas_mascotas",
+          "value": "\"reservas\".\"mascotas\" >= 0"
+        },
         "reservas_estado": {
           "name": "reservas_estado",
           "value": "\"reservas\".\"estado\" in ('pendiente', 'confirmada', 'cancelada', 'expirada')"
-        },
-        "reservas_origen": {
-          "name": "reservas_origen",
-          "value": "\"reservas\".\"origen\" in ('web', 'cortesia', 'rifa', 'mantenimiento')"
-        },
-        "reservas_descuento": {
-          "name": "reservas_descuento",
-          "value": "\"reservas\".\"descuento_cop\" >= 0"
-        },
-        "reservas_cabalgata": {
-          "name": "reservas_cabalgata",
-          "value": "(\"reservas\".\"cabalgata_fecha\" is null and \"reservas\".\"cabalgata_turno\" is null and \"reservas\".\"cabalgata_personas\" = 0 and \"reservas\".\"cabalgata_cop\" = 0) or (\"reservas\".\"cabalgata_fecha\" is not null and \"reservas\".\"cabalgata_turno\" is not null and \"reservas\".\"cabalgata_personas\" > 0 and \"reservas\".\"cabalgata_cop\" >= 0)"
         }
       },
       "isRLSEnabled": false
@@ -1208,13 +1100,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "capacidad_turno": {
-          "name": "capacidad_turno",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 6
         },
         "max_por_pedido": {
           "name": "max_por_pedido",
@@ -1333,10 +1218,6 @@
         "servicios_stock": {
           "name": "servicios_stock",
           "value": "\"servicios\".\"stock\" is null or \"servicios\".\"stock\" >= 0"
-        },
-        "servicios_capacidad_turno": {
-          "name": "servicios_capacidad_turno",
-          "value": "\"servicios\".\"capacidad_turno\" >= 0"
         },
         "servicios_max": {
           "name": "servicios_max",

@@ -32,52 +32,43 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
   });
 
   const codigosDescuento: string[] = [];
-  const fechasCupos: string[] = [];
+  /** Cabalgata propia de las pruebas (con turnos), para no tocar las reales. */
+  const SLUG_PRUEBA = "cabalgata-prueba-turnos";
   let cabalgataId = 0;
+  let aliadoPruebaId = 0;
 
-  /** Deja la cabalgata activa con turnos 9:00 y 15:00, 6 por turno y 85 000 por persona. */
+  /** Crea (una vez) la cabalgata de prueba: turnos 9:00 y 15:00, 6 caballos, 85 000 c/u. */
   async function asegurarCabalgata() {
+    if (cabalgataId) return;
     const { aliados, getDb, servicios } = await import("../src/db");
-    const { SLUG_CABALGATA } = await import("../src/reservas");
+    const [aliado] = await getDb()
+      .insert(aliados)
+      .values({ nombre: "Aliado de prueba", correo: "aliado@example.com" })
+      .returning({ id: aliados.id });
+    aliadoPruebaId = aliado!.id;
     const valores = {
+      aliadoId: aliadoPruebaId,
+      nombre: "Cabalgata de prueba",
+      categoria: "tours" as const,
+      resumen: "Cabalgata de prueba",
+      descripcion: "Cabalgata de prueba",
+      unidadPrecio: "caballo" as const,
+      tipoStock: "cupos" as const,
       activo: true,
       turnos: ["09:00", "15:00"],
       precio: 85_000,
       capacidadTurno: 6,
     };
-    const [existente] = await getDb()
-      .select({ id: servicios.id })
-      .from(servicios)
-      .where(eq(servicios.slug, SLUG_CABALGATA));
-    if (existente) {
-      await getDb().update(servicios).set(valores).where(eq(servicios.id, existente.id));
-      cabalgataId = existente.id;
-      return;
-    }
-    const [aliado] = await getDb()
-      .insert(aliados)
-      .values({ nombre: "Aliado de prueba", correo: "aliado@example.com" })
-      .returning({ id: aliados.id });
     const [s] = await getDb()
       .insert(servicios)
-      .values({
-        slug: SLUG_CABALGATA,
-        aliadoId: aliado!.id,
-        nombre: "Cabalgata al mirador",
-        categoria: "tours",
-        resumen: "Cabalgata de prueba",
-        descripcion: "Cabalgata de prueba",
-        unidadPrecio: "persona",
-        tipoStock: "cupos",
-        ...valores,
-      })
+      .values({ slug: SLUG_PRUEBA, ...valores })
+      .onConflictDoUpdate({ target: servicios.slug, set: valores })
       .returning({ id: servicios.id });
     cabalgataId = s!.id;
   }
 
   async function fijarCupo(fecha: string, turno: string, capacidad: number) {
     const { cuposServicio, getDb } = await import("../src/db");
-    fechasCupos.push(fecha);
     await getDb()
       .insert(cuposServicio)
       .values({ servicioId: cabalgataId, fecha, turno, capacidad })
@@ -92,13 +83,13 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     if (codigos.length) await getDb().delete(reservas).where(inArray(reservas.codigo, codigos));
     if (codigosDescuento.length)
       await getDb().delete(tabla).where(inArray(tabla.codigo, codigosDescuento));
-    if (fechasCupos.length) {
-      const { cuposServicio } = await import("../src/db");
-      await getDb()
-        .delete(cuposServicio)
-        .where(
-          and(eq(cuposServicio.servicioId, cabalgataId), inArray(cuposServicio.fecha, fechasCupos)),
-        );
+    if (cabalgataId) {
+      const { aliados, cuposServicio, servicios } = await import("../src/db");
+      // Por si alguna reserva de la cabalgata de prueba no quedó en `codigos`.
+      await getDb().delete(reservas).where(eq(reservas.cabalgataServicioId, cabalgataId));
+      await getDb().delete(cuposServicio).where(eq(cuposServicio.servicioId, cabalgataId));
+      await getDb().delete(servicios).where(eq(servicios.id, cabalgataId));
+      await getDb().delete(aliados).where(eq(aliados.id, aliadoPruebaId));
     }
     await getDb().$client.end();
   });
@@ -121,6 +112,8 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     correo: "prueba@example.com",
     telefono: "3000000000",
     pais: "Colombia",
+    contactoEmergencia: "Contacto Prueba",
+    telefonoEmergencia: "3110000000",
     aceptaTerminos: true,
   };
 
@@ -146,6 +139,8 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
         correo: "prueba@example.com",
         telefono: "3000000000",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     };
@@ -183,6 +178,8 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
         correo: "prueba@example.com",
         telefono: "3000000000",
         pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
         aceptaTerminos: true,
       },
     });
@@ -245,7 +242,7 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     const { sumarDias } = await import("../src/precios");
 
     const codigo = await nuevoCodigoDescuento();
-    const llegada = sumarDias(hoyEnBogota(), 540);
+    const llegada = sumarDias(hoyEnBogota(), 800);
     const r = await crearReservaPendiente({
       estadia: { llegada, salida: sumarDias(llegada, 2), huespedes: 2, codigo: codigo.codigo },
       huesped: huespedPrueba,
@@ -281,7 +278,7 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     };
 
     // Fechas distintas: solo compiten por el código.
-    const resultados = await Promise.all([reservar(560), reservar(570)]);
+    const resultados = await Promise.all([reservar(820), reservar(830)]);
     for (const r of resultados) if (r.ok) codigos.push(r.codigo);
     expect(resultados.filter((r) => r.ok)).toHaveLength(1);
     expect(resultados.find((r) => !r.ok)).toMatchObject({
@@ -296,7 +293,7 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
       .set({ expiraEn: sql`now() - interval '1 minute'` })
       .where(eq(reservas.codigo, ganadora.codigo));
 
-    const otra = await reservar(580);
+    const otra = await reservar(840);
     if (otra.ok) codigos.push(otra.codigo);
     expect(otra).toMatchObject({ ok: true, cotizacion: { descuento: { codigo } } });
   });
@@ -313,13 +310,20 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     const salida = sumarDias(llegada, 2);
     const dia = sumarDias(llegada, 1);
     const r = await crearReservaPendiente({
-      estadia: { llegada, salida, huespedes: 3, cabalgata: { fecha: dia, turno: "09:00" } },
+      estadia: {
+        llegada,
+        salida,
+        huespedes: 3,
+        cabalgata: { servicio: SLUG_PRUEBA, fecha: dia, turno: "09:00" },
+      },
       huesped: huespedPrueba,
     });
     if (!r.ok) throw new Error(`No se creó la reserva: ${r.error}`);
     codigos.push(r.codigo);
 
     expect(r.cotizacion.cabalgata).toEqual({
+      servicioId: cabalgataId,
+      nombre: "Cabalgata de prueba",
       fecha: dia,
       turno: "09:00",
       personas: 3,
@@ -330,12 +334,14 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, r.codigo));
     expect(fila).toMatchObject({
       totalCop: r.cotizacion.total,
+      cabalgataServicioId: cabalgataId,
       cabalgataFecha: dia,
       cabalgataTurno: "09:00",
       cabalgataPersonas: 3,
       cabalgataCop: 255_000,
     });
     expect((await obtenerReservaPublica(r.codigo))?.cabalgata).toEqual({
+      nombre: "Cabalgata de prueba",
       fecha: dia,
       turno: "09:00",
       personas: 3,
@@ -344,8 +350,9 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
 
     // El hold ocupa 3 de los 6 cupos de ese turno.
     const info = await obtenerCabalgata({ llegada, salida, huespedes: 4 });
-    const turno = info?.opciones
-      .find((o) => o.fecha === dia)
+    const turno = info?.cabalgatas
+      .find((c) => c.slug === SLUG_PRUEBA)
+      ?.dias.find((o) => o.fecha === dia)
       ?.turnos.find((t) => t.turno === "09:00");
     expect(turno).toEqual({ turno: "09:00", libres: 3, alcanza: false });
   });
@@ -363,13 +370,19 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     await fijarCupo(dia, "15:00", 2);
 
     const info = await obtenerCabalgata({ llegada, salida, huespedes: 3 });
-    expect(info?.opciones.find((o) => o.fecha === dia)?.turnos).toEqual([
+    const prueba = info?.cabalgatas.find((c) => c.slug === SLUG_PRUEBA);
+    expect(prueba?.dias.find((o) => o.fecha === dia)?.turnos).toEqual([
       { turno: "09:00", libres: 0, alcanza: false },
       { turno: "15:00", libres: 2, alcanza: false },
     ]);
     for (const turno of ["09:00", "15:00"]) {
       const r = await crearReservaPendiente({
-        estadia: { llegada, salida, huespedes: 3, cabalgata: { fecha: dia, turno } },
+        estadia: {
+          llegada,
+          salida,
+          huespedes: 3,
+          cabalgata: { servicio: SLUG_PRUEBA, fecha: dia, turno },
+        },
         huesped: huespedPrueba,
       });
       if (r.ok) codigos.push(r.codigo);
@@ -391,7 +404,7 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
         llegada,
         salida: sumarDias(llegada, 2),
         huespedes: 2,
-        cabalgata: { fecha: dia, turno: "15:00" },
+        cabalgata: { servicio: SLUG_PRUEBA, fecha: dia, turno: "15:00" },
       },
       huesped: huespedPrueba,
     });
@@ -410,5 +423,159 @@ describe.skipIf(!url)("reservas en BD de pruebas", () => {
     expect(await getDb().transaction((tx) => confirmarReserva(tx, fila!.id, "paypal"))).toBe(
       "confirmada",
     );
+  });
+
+  async function crear(diasDesdeHoy: number, cambios: Record<string, unknown> = {}) {
+    const { crearReservaPendiente } = await import("../src/reservas");
+    const { hoyEnBogota } = await import("../src/moneda");
+    const { sumarDias } = await import("../src/precios");
+    const llegada = sumarDias(hoyEnBogota(), diasDesdeHoy);
+    const r = await crearReservaPendiente({
+      estadia: { llegada, salida: sumarDias(llegada, 2), huespedes: 2, ...cambios },
+      huesped: {
+        nombre: "Prueba Reservas",
+        tipoDocumento: "CC",
+        documento: "123456",
+        correo: "reservas@example.com",
+        telefono: "3000000000",
+        pais: "Colombia",
+        contactoEmergencia: "Contacto Prueba",
+        telefonoEmergencia: "3110000000",
+        alergias: "Maní",
+        aceptaTerminos: true,
+      },
+    });
+    if (r.ok) codigos.push(r.codigo);
+    return r;
+  }
+
+  it("guarda mascotas, alergias y contacto de emergencia; sin contacto no crea la reserva", async () => {
+    const { crearReservaPendiente } = await import("../src/reservas");
+    const { getDb, reservas } = await import("../src/db");
+
+    const r = await crear(540, { mascotas: 2 });
+    if (!r.ok) throw new Error(`No se creó la reserva: ${r.error}`);
+    expect(r.cotizacion.extraMascotas).toBe(2 * 2 * r.cotizacion.precioMascota);
+    const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, r.codigo));
+    expect(fila).toMatchObject({
+      mascotas: 2,
+      alergias: "Maní",
+      contactoEmergencia: "Contacto Prueba",
+      telefonoEmergencia: "3110000000",
+      totalCop: r.cotizacion.total,
+    });
+
+    const sinContacto = await crearReservaPendiente({
+      estadia: { llegada: "2030-01-10", salida: "2030-01-12", huespedes: 2 },
+      huesped: {
+        nombre: "Prueba Reservas",
+        tipoDocumento: "CC",
+        documento: "123456",
+        correo: "reservas@example.com",
+        telefono: "3000000000",
+        pais: "Colombia",
+        aceptaTerminos: true,
+      },
+    });
+    expect(sinContacto).toMatchObject({ ok: false, error: "datos_invalidos" });
+    if (!sinContacto.ok && sinContacto.error === "datos_invalidos") {
+      expect(Object.keys(sinContacto.errores)).toEqual(
+        expect.arrayContaining(["contactoEmergencia", "telefonoEmergencia"]),
+      );
+    }
+  });
+
+  it("liberar cancela la reserva pendiente y no toca una confirmada", async () => {
+    const { getDb, reservas } = await import("../src/db");
+    const { liberarReservaPendiente } = await import("../src/reservas");
+    const estado = async (codigo: string) =>
+      (await getDb().select().from(reservas).where(eq(reservas.codigo, codigo)))[0]?.estado;
+
+    const pendiente = await crear(560);
+    const confirmada = await crear(570);
+    if (!pendiente.ok || !confirmada.ok) throw new Error("No se crearon las reservas");
+    await getDb()
+      .update(reservas)
+      .set({ estado: "confirmada" })
+      .where(eq(reservas.codigo, confirmada.codigo));
+
+    await liberarReservaPendiente(pendiente.codigo);
+    await liberarReservaPendiente(confirmada.codigo);
+    expect(await estado(pendiente.codigo)).toBe("cancelada");
+    expect(await estado(confirmada.codigo)).toBe("confirmada");
+
+    // Las fechas liberadas se pueden volver a reservar.
+    expect(await crear(560)).toMatchObject({ ok: true });
+  });
+
+  it("un apartado vencido libera las fechas y queda expirado", async () => {
+    const { getDb, reservas } = await import("../src/db");
+    const { sql } = await import("drizzle-orm");
+
+    const primera = await crear(580);
+    if (!primera.ok) throw new Error("No se creó la reserva");
+    expect(await crear(580)).toMatchObject({ ok: false, error: "no_disponible" });
+
+    await getDb()
+      .update(reservas)
+      .set({ expiraEn: sql`now() - interval '1 minute'` })
+      .where(eq(reservas.codigo, primera.codigo));
+
+    expect(await crear(580)).toMatchObject({ ok: true });
+    const [fila] = await getDb().select().from(reservas).where(eq(reservas.codigo, primera.codigo));
+    expect(fila?.estado).toBe("expirada");
+  });
+
+  it("un error de BD llega al log sin datos personales", async () => {
+    const { errorSinDatos, getDb, reservas } = await import("../src/db");
+    let original: unknown;
+    try {
+      // huespedes = 99 viola reservas_huespedes.
+      await getDb().insert(reservas).values({
+        codigo: "LAU-ERRORPRB",
+        fechaLlegada: "2030-02-01",
+        fechaSalida: "2030-02-02",
+        huespedes: 99,
+        totalCop: 1,
+        desglose: [],
+        nombre: "Dato Secreto",
+        correo: "secreto@example.com",
+        telefono: "3000000000",
+        tipoDocumento: "CC",
+        documento: "999999",
+        pais: "Colombia",
+        expiraEn: new Date(),
+        terminosVersion: "1",
+      });
+    } catch (error) {
+      original = error;
+    }
+    // El error de Drizzle sí trae los parámetros: por eso no se registra tal cual.
+    expect(String((original as Error).message)).toContain("secreto@example.com");
+    const limpio = errorSinDatos("No se pudo crear la reserva", original).message;
+    expect(limpio).toContain("23514");
+    expect(limpio).not.toMatch(/Dato Secreto|secreto@example\.com|999999/);
+  });
+
+  it("límite de peticiones: bloquea al pasar el máximo y se reinicia con la ventana", async () => {
+    const { getDb, limitesPeticiones, permitirPeticion } = await import("../src/db");
+    const { sql } = await import("drizzle-orm");
+    const clave = `prueba:${Date.now()}`;
+
+    expect(await permitirPeticion(clave, 2, 60)).toBe(true);
+    expect(await permitirPeticion(clave, 2, 60)).toBe(true);
+    expect(await permitirPeticion(clave, 2, 60)).toBe(false);
+    // Simultáneas: ninguna se salta el conteo.
+    const varias = await Promise.all(
+      Array.from({ length: 5 }, () => permitirPeticion(`${clave}:b`, 3, 60)),
+    );
+    expect(varias.filter(Boolean)).toHaveLength(3);
+
+    // Ventana vencida: vuelve a permitir.
+    await getDb()
+      .update(limitesPeticiones)
+      .set({ inicio: sql`now() - interval '2 minutes'` });
+    expect(await permitirPeticion(clave, 2, 60)).toBe(true);
+    await getDb().delete(limitesPeticiones);
   });
 });
